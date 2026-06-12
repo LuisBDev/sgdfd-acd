@@ -14,19 +14,19 @@ using AppUpdateOptions = ACWF.Configuration.UpdateOptions;
 // Inicialización de Velopack — DEBE ser la primera instrucción.
 // Maneja eventos de ciclo de vida install/update/uninstall y puede salir del proceso.
 VelopackApp.Build()
-    .WithFirstRun(_ =>
+    .OnFirstRun(_ =>
     {
         string exePath = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
         UriSchemeHelper.EnsureRegistered("acwf", exePath);
         UriSchemeHelper.EnsureRegistered("acwf-dev", exePath);
     })
-    .WithAfterUpdateFastCallback(_ =>
+    .OnAfterUpdateFastCallback(_ =>
     {
         string exePath = Environment.ProcessPath ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
         UriSchemeHelper.EnsureRegistered("acwf", exePath);
         UriSchemeHelper.EnsureRegistered("acwf-dev", exePath);
     })
-    .WithBeforeUninstallFastCallback(_ =>
+    .OnBeforeUninstallFastCallback(_ =>
     {
         UriSchemeHelper.Unregister("acwf");
         UriSchemeHelper.Unregister("acwf-dev");
