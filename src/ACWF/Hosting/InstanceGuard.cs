@@ -1,4 +1,4 @@
-namespace ACWF.System;
+namespace ACWF.Hosting;
 
 /// <summary>
 /// Aplica comportamiento de single-instance por environment usando un named global Mutex.
@@ -19,7 +19,6 @@ public static class InstanceGuard
 
         if (!isNewInstance)
         {
-            // Otra instancia de la misma variante ya está corriendo — salir silenciosamente.
             mutex.Dispose();
             Environment.Exit(0);
         }

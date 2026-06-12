@@ -1,12 +1,5 @@
 namespace ACWF.WebSocket;
 
-public interface ISessionGate
-{
-    bool IsActive { get; }
-    Task<bool> TryAcquireAsync(CancellationToken ct);
-    void Release();
-}
-
 /// <summary>
 /// Gate thread-safe singleton que asegura a lo sumo una sesión WebSocket activa.
 /// Usa SemaphoreSlim(1,1) para atomic check-and-acquire.

@@ -7,7 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-namespace ACWF.System;
+namespace ACWF.Tray;
 
 /// <summary>
 /// Aloja el NotifyIcon en un thread STA dedicado.
@@ -55,7 +55,6 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         _staThread.SetApartmentState(ApartmentState.STA);
         _staThread.Start();
 
-        // Esperar hasta que el thread STA haya configurado el SynchronizationContext.
         return _staReady.Task;
     }
 
@@ -79,7 +78,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Error disposing tray icon");
+                _logger.LogWarning(ex, "Error al eliminar el icono de la bandeja");
             }
             finally
             {
@@ -87,7 +86,6 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
             }
         }, null);
 
-        // Join con timeout para evitar bloquear el shutdown indefinidamente.
         _staThread?.Join(TimeSpan.FromSeconds(3));
         return tcs.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
     }
@@ -141,14 +139,14 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
     private async void CheckForUpdatesClicked()
     {
-        _logger.LogInformation("User requested manual update check");
+        _logger.LogInformation("El usuario solicitó verificación manual de actualizaciones");
         try
         {
             await _updateTrigger.Value.CheckNowAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Manual update check failed");
+            _logger.LogError(ex, "Error en la verificación manual de actualizaciones");
         }
     }
 
@@ -164,7 +162,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to restart process");
+            _logger.LogError(ex, "Error al reiniciar el proceso");
         }
         _lifetime.StopApplication();
     }

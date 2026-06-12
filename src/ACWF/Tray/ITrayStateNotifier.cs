@@ -1,4 +1,4 @@
-namespace ACWF.System;
+namespace ACWF.Tray;
 
 public enum TrayState
 {

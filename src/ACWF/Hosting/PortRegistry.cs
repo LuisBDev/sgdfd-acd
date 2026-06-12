@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 
-namespace ACWF.System;
+namespace ACWF.Hosting;
 
 /// <summary>
 /// Administra un lock file que anuncia el puerto activo de Kestrel para que otros procesos
@@ -18,10 +18,6 @@ public static class PortRegistry
             packId,
             "port.lock");
 
-    /// <summary>
-    /// Escribe el número de puerto en el lock file.
-    /// Crea el directorio si no existe.
-    /// </summary>
     public static void Write(string packId, int port)
     {
         string lockFile = GetLockFilePath(packId);
@@ -32,13 +28,10 @@ public static class PortRegistry
         }
         catch (IOException ex)
         {
-            _logger?.LogWarning(ex, "Failed to write port lock file at {LockFile}", lockFile);
+            _logger?.LogWarning(ex, "Error al escribir el archivo lock del puerto en {LockFile}", lockFile);
         }
     }
 
-    /// <summary>
-    /// Elimina el lock file en apagado graceful.
-    /// </summary>
     public static void Delete(string packId)
     {
         string lockFile = GetLockFilePath(packId);
@@ -55,9 +48,6 @@ public static class PortRegistry
         }
     }
 
-    /// <summary>
-    /// Lee y parsea el puerto desde el lock file. Retorna null en cualquier fallo.
-    /// </summary>
     public static int? TryRead(string packId)
     {
         string lockFile = GetLockFilePath(packId);
