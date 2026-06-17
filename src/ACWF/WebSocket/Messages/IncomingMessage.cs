@@ -21,3 +21,7 @@ public sealed record PdfDownloadMessage(
 public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("filename")] string Filename);
+
+/// <summary>CLEANUP_CONFIRMED — el frontend confirma que el upload al backend fue exitoso; ACWF puede borrar los PDFs.</summary>
+public sealed record CleanupConfirmedMessage(
+    [property: JsonPropertyName("type")] string Type);

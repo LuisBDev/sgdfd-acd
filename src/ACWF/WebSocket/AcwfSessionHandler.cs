@@ -157,6 +157,18 @@ public sealed class AcwfSessionHandler
                 await SendSignedFileAsync(webSocket, reqMsg.Filename, ct);
                 return;
 
+            // Estado WAITING_CLEANUP_CONFIRM: CLEANUP_CONFIRMED es válido.
+            case (SessionState.WaitingCleanupConfirm, MessageType.CleanupConfirmed):
+                _logger.LogInformation("[{SessionId}] CLEANUP_CONFIRMED recibido, eliminando archivos", _sessionId);
+                if (_currentFilename is not null)
+                {
+                    _depositService.Cleanup(_currentFilename);
+                }
+                await SendJsonAsync(webSocket, new CleanupDoneMessage(), AcwfJsonContext.Default.CleanupDoneMessage, ct);
+                await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Cleanup complete", ct);
+                _state = SessionState.Idle;
+                return;
+
             default:
                 _logger.LogWarning(
                     "[{SessionId}] Tipo de mensaje inesperado {Type} en estado {State}",
@@ -316,9 +328,8 @@ public sealed class AcwfSessionHandler
             return;
         }
 
-        // Cierre normal después del envío exitoso.
-        await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Signing session complete", ct);
-        _state = SessionState.Idle;
+        _state = SessionState.WaitingCleanupConfirm;
+        _logger.LogInformation("[{SessionId}] SIGNED_FILE enviado, esperando CLEANUP_CONFIRMED", _sessionId);
     }
 
     // --- Helpers ---
@@ -401,8 +412,10 @@ public sealed class AcwfSessionHandler
 
     private static bool IsKnownMessageType(string type) =>
         type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
+            or MessageType.CleanupConfirmed
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
-            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
+            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error
+            or MessageType.CleanupDone;
 
     private enum FrameKind { Text, Binary, Close }
 }

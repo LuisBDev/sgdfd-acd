@@ -112,4 +112,30 @@ public sealed class FileDepositService : IFileDepositService
             throw new InvalidOperationException("WRITE_FAILED", ex);
         }
     }
+
+    public void Cleanup(string originalFilename)
+    {
+        string baseName = Path.GetFileNameWithoutExtension(originalFilename);
+        string originalPath = Path.Combine(_options.WatchDirectory, originalFilename);
+        string signedPath = Path.Combine(_options.WatchDirectory, $"{baseName}[F].pdf");
+
+        TryDelete(originalPath);
+        TryDelete(signedPath);
+    }
+
+    private void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+                _logger.LogInformation("Archivo eliminado: {Path}", path);
+            }
+        }
+        catch (IOException ex)
+        {
+            _logger.LogWarning(ex, "No se pudo eliminar {Path}", path);
+        }
+    }
 }

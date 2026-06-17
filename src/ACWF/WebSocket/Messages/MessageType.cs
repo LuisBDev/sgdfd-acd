@@ -9,6 +9,7 @@ public static class MessageType
     public const string Auth = "AUTH";
     public const string PdfDownload = "PDF_DOWNLOAD";
     public const string RequestSignedFile = "REQUEST_SIGNED_FILE";
+    public const string CleanupConfirmed = "CLEANUP_CONFIRMED";
 
     // Outgoing (ACWF → MFD)
     public const string AuthOk = "AUTH_OK";
@@ -18,4 +19,5 @@ public static class MessageType
     public const string SignedFile = "SIGNED_FILE";
     public const string FirmaTimeout = "FIRMA_TIMEOUT";
     public const string Error = "ERROR";
+    public const string CleanupDone = "CLEANUP_DONE";
 }
