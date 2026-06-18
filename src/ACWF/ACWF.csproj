@@ -1,48 +1,46 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
-  <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>ACWF</AssemblyName>
-    <RootNamespace>ACWF</RootNamespace>
-    <AssemblyVersion>0.1.0</AssemblyVersion>
-    <FileVersion>0.1.0</FileVersion>
-    <Version>0.1.0</Version>
-    <ApplicationIcon>acwf.ico</ApplicationIcon>
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0-windows</TargetFramework>
+        <UseWindowsForms>true</UseWindowsForms>
+        <AssemblyName>ACWF</AssemblyName>
+        <RootNamespace>ACWF</RootNamespace>
+        <AssemblyVersion>0.1.0</AssemblyVersion>
+        <FileVersion>0.1.0</FileVersion>
+        <Version>0.1.0</Version>
+        <ApplicationIcon>acwf.ico</ApplicationIcon>
 
-    <!--
-      Variante horneada en el build (Dev | Prod). CI la pasa con -p:AcwfVariant=Dev|Prod.
-      Se embebe como metadata del assembly y el runtime la lee para decidir
-      environment/packId/channel SIN depender de ASPNETCORE_ENVIRONMENT (que no
-      sobrevive a la instalación). Por defecto Prod (builds locales / dotnet run).
-    -->
-    <AcwfVariant Condition="'$(AcwfVariant)' == ''">Prod</AcwfVariant>
-  </PropertyGroup>
+        <!-- Incrustado en el build por CI con -p:AcwfVariant=Dev|Prod.
+             El runtime lee el metadata del assembly para elegir environment/packId/channel
+             porque ASPNETCORE_ENVIRONMENT no sobrevive a la instalación.
+             Default Prod para builds locales. -->
+        <AcwfVariant Condition="'$(AcwfVariant)' == ''">Prod</AcwfVariant>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <AssemblyMetadata Include="AcwfVariant" Value="$(AcwfVariant)" />
-  </ItemGroup>
+    <ItemGroup>
+        <AssemblyMetadata Include="AcwfVariant" Value="$(AcwfVariant)"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <PackageReference Include="Velopack" Version="1.2.0" />
-    <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
-    <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
-    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Velopack" Version="1.2.0"/>
+        <PackageReference Include="Serilog.Extensions.Hosting" Version="9.0.0"/>
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0"/>
+        <PackageReference Include="Serilog.Sinks.File" Version="6.0.0"/>
+        <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <!-- Ensure appsettings files are always copied (SDK already includes them; just set copy behavior) -->
-    <Content Update="appsettings.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Update="appsettings.Development.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-    <Content Update="appsettings.Production.json">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+    <ItemGroup>
+        <!-- Ensure appsettings files are always copied (SDK already includes them; just set copy behavior) -->
+        <Content Update="appsettings.json">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+        <Content Update="appsettings.Development.json">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+        <Content Update="appsettings.Production.json">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+        </Content>
+    </ItemGroup>
 
 </Project>

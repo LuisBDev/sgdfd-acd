@@ -1,22 +1,20 @@
 using ACWF.Configuration;
 using ACWF.Tray;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ACWF.Firma;
 
 /// <summary>
-/// Escribe los bytes del PDF recibido en el watch directory configurado (default C:\TFIRMA).
-/// Escritura en streaming — no bufferiza el archivo completo en memoria.
+///     Escribe los bytes del PDF recibido en el watch directory configurado (default C:\TFIRMA).
+///     Escritura en streaming — no bufferiza el archivo completo en memoria.
 /// </summary>
 public sealed class FileDepositService : IFileDepositService
 {
+    private const int WriteBufferSize = 64 * 1024; // 64 KB
+    private readonly ILogger<FileDepositService> _logger;
     private readonly AcwfOptions _options;
     private readonly ITrayStateNotifier _trayNotifier;
-    private readonly ILogger<FileDepositService> _logger;
     private bool _dirUnavailable;
-
-    private const int WriteBufferSize = 64 * 1024; // 64 KB
 
     public FileDepositService(
         IOptions<AcwfOptions> options,
@@ -30,30 +28,6 @@ public sealed class FileDepositService : IFileDepositService
         EnsureWatchDirectory();
     }
 
-    private void EnsureWatchDirectory()
-    {
-        try
-        {
-            Directory.CreateDirectory(_options.WatchDirectory);
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _logger.LogCritical(ex,
-                "No se puede crear o acceder al directorio de vigilancia {WatchDirectory}. Los depósitos de PDF fallarán.",
-                _options.WatchDirectory);
-            _trayNotifier.SetState(TrayState.Error);
-            _dirUnavailable = true;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogCritical(ex,
-                "Error inesperado al inicializar el directorio de vigilancia {WatchDirectory}.",
-                _options.WatchDirectory);
-            _trayNotifier.SetState(TrayState.Error);
-            _dirUnavailable = true;
-        }
-    }
-
     public async Task<string> DepositAsync(string filename, Stream content, CancellationToken ct)
     {
         // Validar filename — rechazar path traversal y rutas absolutas.
@@ -62,24 +36,17 @@ public sealed class FileDepositService : IFileDepositService
             || filename.Contains(Path.DirectorySeparatorChar)
             || filename.Contains(Path.AltDirectorySeparatorChar)
             || Path.IsPathRooted(filename))
-        {
             throw new ArgumentException($"Invalid filename: {filename}", nameof(filename));
-        }
 
-        if (_dirUnavailable)
-        {
-            throw new InvalidOperationException("WRITE_FAILED");
-        }
+        if (_dirUnavailable) throw new InvalidOperationException("WRITE_FAILED");
 
-        string destPath = Path.Combine(_options.WatchDirectory, filename);
+        var destPath = Path.Combine(_options.WatchDirectory, filename);
 
         // Guard de path traversal: confirmar que la ruta resuelta está dentro de WatchDirectory.
-        string watchDirNormalized = Path.GetFullPath(_options.WatchDirectory);
-        string destNormalized = Path.GetFullPath(destPath);
+        var watchDirNormalized = Path.GetFullPath(_options.WatchDirectory);
+        var destNormalized = Path.GetFullPath(destPath);
         if (!destNormalized.StartsWith(watchDirNormalized, StringComparison.OrdinalIgnoreCase))
-        {
             throw new ArgumentException($"Filename resolves outside watch directory: {filename}", nameof(filename));
-        }
 
         try
         {
@@ -89,8 +56,8 @@ public sealed class FileDepositService : IFileDepositService
                 FileMode.Create,
                 FileAccess.Write,
                 FileShare.None,
-                bufferSize: WriteBufferSize,
-                useAsync: true);
+                WriteBufferSize,
+                true);
 
             var buffer = new byte[WriteBufferSize];
             int bytesRead;
@@ -115,12 +82,36 @@ public sealed class FileDepositService : IFileDepositService
 
     public void Cleanup(string originalFilename)
     {
-        string baseName = Path.GetFileNameWithoutExtension(originalFilename);
-        string originalPath = Path.Combine(_options.WatchDirectory, originalFilename);
-        string signedPath = Path.Combine(_options.WatchDirectory, $"{baseName}[F].pdf");
+        var baseName = Path.GetFileNameWithoutExtension(originalFilename);
+        var originalPath = Path.Combine(_options.WatchDirectory, originalFilename);
+        var signedPath = Path.Combine(_options.WatchDirectory, $"{baseName}[F].pdf");
 
         TryDelete(originalPath);
         TryDelete(signedPath);
+    }
+
+    private void EnsureWatchDirectory()
+    {
+        try
+        {
+            Directory.CreateDirectory(_options.WatchDirectory);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogCritical(ex,
+                "No se puede crear o acceder al directorio de vigilancia {WatchDirectory}. Los depósitos de PDF fallarán.",
+                _options.WatchDirectory);
+            _trayNotifier.SetState(TrayState.Error);
+            _dirUnavailable = true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogCritical(ex,
+                "Error inesperado al inicializar el directorio de vigilancia {WatchDirectory}.",
+                _options.WatchDirectory);
+            _trayNotifier.SetState(TrayState.Error);
+            _dirUnavailable = true;
+        }
     }
 
     private void TryDelete(string path)

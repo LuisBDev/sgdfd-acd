@@ -1,8 +1,8 @@
 namespace ACWF.WebSocket;
 
 /// <summary>
-/// Gate thread-safe singleton que asegura a lo sumo una sesión WebSocket activa.
-/// Usa SemaphoreSlim(1,1) para atomic check-and-acquire.
+///     Gate thread-safe singleton que asegura a lo sumo una sesión WebSocket activa.
+///     Usa SemaphoreSlim(1,1) para atomic check-and-acquire.
 /// </summary>
 public sealed class SessionGate : ISessionGate
 {
@@ -12,20 +12,17 @@ public sealed class SessionGate : ISessionGate
     public bool IsActive => _isActive;
 
     /// <summary>
-    /// Intenta adquirir el session gate. Retorna false inmediatamente si ya hay una sesión activa.
+    ///     Intenta adquirir el session gate. Retorna false inmediatamente si ya hay una sesión activa.
     /// </summary>
     public async Task<bool> TryAcquireAsync(CancellationToken ct)
     {
-        bool acquired = await _lock.WaitAsync(0, ct).ConfigureAwait(false);
-        if (acquired)
-        {
-            _isActive = true;
-        }
+        var acquired = await _lock.WaitAsync(0, ct).ConfigureAwait(false);
+        if (acquired) _isActive = true;
         return acquired;
     }
 
     /// <summary>
-    /// Libera el gate, permitiendo que nuevas sesiones se conecten.
+    ///     Libera el gate, permitiendo que nuevas sesiones se conecten.
     /// </summary>
     public void Release()
     {

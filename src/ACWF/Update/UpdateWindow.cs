@@ -1,24 +1,23 @@
-using global::System.Drawing;
-using global::System.Windows.Forms;
 using ACWF.WebSocket;
+using Timer = System.Windows.Forms.Timer;
 
 namespace ACWF.Update;
 
 /// <summary>
-/// Ventana WinForms no-modal que muestra el estado del update y permite al usuario aplicar un update pendiente.
-/// Se abre desde el context menu del tray Icon.
+///     Ventana WinForms no-modal que muestra el estado del update y permite al usuario aplicar un update pendiente.
+///     Se abre desde el context menu del tray Icon.
 /// </summary>
 public sealed class UpdateWindow : Form
 {
-    private readonly UpdateService _updateService;
-    private readonly ISessionGate _sessionGate;
+    private readonly Button _btnApply;
+    private readonly Label _lblAvailableVersion;
 
     private readonly Label _lblCurrentVersion;
-    private readonly Label _lblAvailableVersion;
-    private readonly ProgressBar _pbDownload;
     private readonly Label _lblStatus;
-    private readonly Button _btnApply;
-    private readonly global::System.Windows.Forms.Timer _refreshTimer;
+    private readonly ProgressBar _pbDownload;
+    private readonly Timer _refreshTimer;
+    private readonly ISessionGate _sessionGate;
+    private readonly UpdateService _updateService;
 
     public UpdateWindow(UpdateService updateService, ISessionGate sessionGate, string currentVersion)
     {
@@ -56,7 +55,7 @@ public sealed class UpdateWindow : Form
 
         _btnApply.Click += OnApplyClicked;
 
-        _refreshTimer = new global::System.Windows.Forms.Timer { Interval = 250 };
+        _refreshTimer = new Timer { Interval = 250 };
         _refreshTimer.Tick += OnRefreshTick;
         _refreshTimer.Start();
 
@@ -69,7 +68,7 @@ public sealed class UpdateWindow : Form
 
     private void OnRefreshTick(object? sender, EventArgs e)
     {
-        int progress = _updateService.LastProgress;
+        var progress = _updateService.LastProgress;
         _pbDownload.Value = Math.Min(progress, 100);
 
         if (_updateService.HasPendingUpdate)
@@ -101,6 +100,7 @@ public sealed class UpdateWindow : Form
             _refreshTimer.Stop();
             _refreshTimer.Dispose();
         }
+
         base.Dispose(disposing);
     }
 }

@@ -1,7 +1,5 @@
-using System.Net.WebSockets;
 using ACWF.Configuration;
 using ACWF.Firma;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 using WebSocketCloseStatus = System.Net.WebSockets.WebSocketCloseStatus;
@@ -9,15 +7,15 @@ using WebSocketCloseStatus = System.Net.WebSockets.WebSocketCloseStatus;
 namespace ACWF.WebSocket;
 
 /// <summary>
-/// Middleware de ASP.NET Core que maneja WebSocket upgrades en /acwf.
-/// Aplica validación de Origin, single-session gate, y delega a AcwfSessionHandler.
+///     Middleware de ASP.NET Core que maneja WebSocket upgrades en /acwf.
+///     Aplica validación de Origin, single-session gate, y delega a AcwfSessionHandler.
 /// </summary>
 public sealed class AcwfWebSocketMiddleware
 {
-    private readonly RequestDelegate _next;
-    private readonly ISessionGate _sessionGate;
-    private readonly AcwfOptions _options;
     private readonly ILogger<AcwfWebSocketMiddleware> _logger;
+    private readonly RequestDelegate _next;
+    private readonly AcwfOptions _options;
+    private readonly ISessionGate _sessionGate;
     private readonly IServiceProvider _sp;
 
     public AcwfWebSocketMiddleware(
@@ -46,11 +44,8 @@ public sealed class AcwfWebSocketMiddleware
         // Non-WS request on /acwf → health check (no session gate).
         if (!context.WebSockets.IsWebSocketRequest)
         {
-            string origin = context.Request.Headers.Origin.ToString();
-            if (IsOriginAllowed(origin))
-            {
-                context.Response.Headers["Access-Control-Allow-Origin"] = origin;
-            }
+            var origin = context.Request.Headers.Origin.ToString();
+            if (IsOriginAllowed(origin)) context.Response.Headers["Access-Control-Allow-Origin"] = origin;
 
             if (HttpMethods.IsOptions(context.Request.Method))
             {
@@ -75,7 +70,7 @@ public sealed class AcwfWebSocketMiddleware
         }
 
         // Intentar adquirir el single-session gate.
-        bool acquired = await _sessionGate.TryAcquireAsync(context.RequestAborted);
+        var acquired = await _sessionGate.TryAcquireAsync(context.RequestAborted);
 
         if (!acquired)
         {
@@ -94,7 +89,7 @@ public sealed class AcwfWebSocketMiddleware
         var depositService = scope.ServiceProvider.GetRequiredService<IFileDepositService>();
         var watcherService = scope.ServiceProvider.GetRequiredService<IFirmaWatcherService>();
 
-        string sessionId = Guid.NewGuid().ToString("N");
+        var sessionId = Guid.NewGuid().ToString("N");
         NativeWebSocket? webSocket = null;
 
         try
@@ -110,10 +105,7 @@ public sealed class AcwfWebSocketMiddleware
             _sessionGate.Release();
             await watcherService.DisposeAsync();
 
-            if (webSocket is not null)
-            {
-                _logger.LogInformation("Sesión WebSocket cerrada: {SessionId}", sessionId);
-            }
+            if (webSocket is not null) _logger.LogInformation("Sesión WebSocket cerrada: {SessionId}", sessionId);
         }
     }
 
@@ -123,10 +115,8 @@ public sealed class AcwfWebSocketMiddleware
         if (_options.AllowedOrigins.Contains("*")) return true;
 
         foreach (var allowed in _options.AllowedOrigins)
-        {
             if (string.Equals(allowed, origin, StringComparison.OrdinalIgnoreCase))
                 return true;
-        }
 
         return false;
     }

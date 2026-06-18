@@ -13,6 +13,6 @@ public record FirmaEvent(FirmaEventType Type, string FilePath, string? ErrorMess
 
 public interface IFirmaWatcherService : IAsyncDisposable
 {
-    void StartWatching(string originalFilename);
     ChannelReader<FirmaEvent> Events { get; }
+    void StartWatching(string originalFilename);
 }

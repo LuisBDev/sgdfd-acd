@@ -1,35 +1,35 @@
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using ACWF.Firma;
 using ACWF.WebSocket.Messages;
-using Microsoft.Extensions.Logging;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
 namespace ACWF.WebSocket;
 
 /// <summary>
-/// Maneja el ciclo de vida completo de una sesión WebSocket vía una state machine.
-/// Se instancia por sesión desde AcwfWebSocketMiddleware.
+///     Maneja el ciclo de vida completo de una sesión WebSocket vía una state machine.
+///     Se instancia por sesión desde AcwfWebSocketMiddleware.
 /// </summary>
 public sealed class AcwfSessionHandler
 {
-    private readonly IFileDepositService _depositService;
-    private readonly IFirmaWatcherService _watcherService;
-    private readonly ILogger _logger;
-    private readonly string _sessionId;
-    private readonly string _watchDirectory;
-    private readonly int _firmaTimeoutSeconds;
-
-    private SessionState _state = SessionState.Connected;
-    private string? _authToken;
-    private string? _currentFilename;
-    private string? _firmaFilePath;
-
     private const int BufferSize = 64 * 1024;
 
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
+
+    private readonly IFileDepositService _depositService;
+    private readonly int _firmaTimeoutSeconds;
+    private readonly ILogger _logger;
+    private readonly string _sessionId;
+    private readonly string _watchDirectory;
+    private readonly IFirmaWatcherService _watcherService;
+    private string? _authToken;
+    private string? _currentFilename;
+    private string? _firmaFilePath;
+
+    private SessionState _state = SessionState.Connected;
 
     public AcwfSessionHandler(
         IFileDepositService depositService,
@@ -53,14 +53,14 @@ public sealed class AcwfSessionHandler
 
         try
         {
-            // Paso 1: Enviar CONNECTED inmediatamente.
+            // Enviar CONNECTED al cliente inmediatamente después del upgrade.
             var connected = new ConnectedMessage(
-                Version: AgentVersion,
-                Status: "READY",
-                WatchDir: _watchDirectory);
+                AgentVersion,
+                "READY",
+                _watchDirectory);
             await SendJsonAsync(webSocket, connected, AcwfJsonContext.Default.ConnectedMessage, ct);
 
-            // Paso 2: Loop de state machine.
+            // Loop principal de la state machine.
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
                 var (kind, payload) = await ReceiveFrameAsync(webSocket, ct);
@@ -80,7 +80,7 @@ public sealed class AcwfSessionHandler
                 // Text frame — deserializar y despachar.
                 if (payload is null) continue;
 
-                BaseMessage? baseMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.BaseMessage);
+                var baseMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.BaseMessage);
                 if (baseMsg is null)
                 {
                     await SendErrorAndCloseAsync(webSocket, "UNKNOWN_MESSAGE_TYPE", "Could not parse message type", 1011, ct);
@@ -105,7 +105,10 @@ public sealed class AcwfSessionHandler
             {
                 await SendErrorAndCloseAsync(webSocket, "INTERNAL_ERROR", ex.Message, 1011, ct);
             }
-            catch { /* Limpieza best-effort */ }
+            catch
+            {
+                /* Limpieza best-effort */
+            }
         }
         finally
         {
@@ -126,7 +129,7 @@ public sealed class AcwfSessionHandler
         byte[] payload,
         CancellationToken ct)
     {
-        switch ((_state, messageType))
+        switch (_state, messageType)
         {
             // Estado CONNECTED: solo AUTH es válido.
             case (SessionState.Connected, MessageType.Auth):
@@ -166,10 +169,7 @@ public sealed class AcwfSessionHandler
             // Estado WAITING_CLEANUP_CONFIRM: CLEANUP_CONFIRMED es válido.
             case (SessionState.WaitingCleanupConfirm, MessageType.CleanupConfirmed):
                 _logger.LogInformation("[{SessionId}] CLEANUP_CONFIRMED recibido, eliminando archivos", _sessionId);
-                if (_currentFilename is not null)
-                {
-                    _depositService.Cleanup(_currentFilename);
-                }
+                if (_currentFilename is not null) _depositService.Cleanup(_currentFilename);
                 await SendJsonAsync(webSocket, new CleanupDoneMessage(), AcwfJsonContext.Default.CleanupDoneMessage, ct);
                 await CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Cleanup complete", ct);
                 _state = SessionState.Idle;
@@ -179,7 +179,7 @@ public sealed class AcwfSessionHandler
                 _logger.LogWarning(
                     "[{SessionId}] Tipo de mensaje inesperado {Type} en estado {State}",
                     _sessionId, messageType, _state);
-                string errorCode = IsKnownMessageType(messageType) ? "UNEXPECTED_MESSAGE" : "UNKNOWN_MESSAGE_TYPE";
+                var errorCode = IsKnownMessageType(messageType) ? "UNEXPECTED_MESSAGE" : "UNKNOWN_MESSAGE_TYPE";
                 await SendErrorAndCloseAsync(webSocket, errorCode, $"Message type {messageType} not valid in state {_state}", 1011, ct);
                 return;
         }
@@ -236,12 +236,11 @@ public sealed class AcwfSessionHandler
         try
         {
             await foreach (var firmaEvent in _watcherService.Events.ReadAllAsync(ct))
-            {
                 switch (firmaEvent.Type)
                 {
                     case FirmaEventType.FileReady:
                         _firmaFilePath = firmaEvent.FilePath;
-                        string signedFilename = Path.GetFileName(firmaEvent.FilePath);
+                        var signedFilename = Path.GetFileName(firmaEvent.FilePath);
                         _logger.LogInformation("[{SessionId}] FIRMA_DISPONIBLE: {File}", _sessionId, signedFilename);
                         await SendJsonAsync(webSocket, new FirmaDisponibleMessage(signedFilename), AcwfJsonContext.Default.FirmaDisponibleMessage, ct);
                         // El estado sigue WatchingFirma hasta que se recibe REQUEST_SIGNED_FILE.
@@ -260,7 +259,6 @@ public sealed class AcwfSessionHandler
                         await SendErrorAndCloseAsync(webSocket, firmaEvent.ErrorMessage ?? "FILE_LOCKED", "Signed file is locked", 1011, ct);
                         return;
                 }
-            }
         }
         catch (OperationCanceledException)
         {
@@ -274,8 +272,8 @@ public sealed class AcwfSessionHandler
         CancellationToken ct)
     {
         // Preferir la ruta completa capturada por WatchFirmaAsync; fallback a construir desde watch dir.
-        string filePath = _firmaFilePath
-            ?? Path.Combine(_watchDirectory, signedFilename);
+        var filePath = _firmaFilePath
+                       ?? Path.Combine(_watchDirectory, signedFilename);
 
         if (!File.Exists(filePath))
         {
@@ -305,20 +303,20 @@ public sealed class AcwfSessionHandler
         try
         {
             await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                bufferSize: 64 * 1024, useAsync: true);
+                64 * 1024, true);
 
             var buffer = new byte[64 * 1024];
-            long remaining = fileSize;
+            var remaining = fileSize;
             int bytesRead;
 
             while ((bytesRead = await fs.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
             {
                 remaining -= bytesRead;
-                bool endOfMessage = remaining <= 0;
+                var endOfMessage = remaining <= 0;
                 await webSocket.SendAsync(
                     buffer.AsMemory(0, bytesRead),
                     WebSocketMessageType.Binary,
-                    endOfMessage: endOfMessage,
+                    endOfMessage,
                     ct).ConfigureAwait(false);
             }
 
@@ -355,8 +353,7 @@ public sealed class AcwfSessionHandler
                 return (FrameKind.Close, null);
 
             ms.Write(buffer, 0, result.Count);
-        }
-        while (!result.EndOfMessage);
+        } while (!result.EndOfMessage);
 
         var data = ms.ToArray();
         var kind = result.MessageType == WebSocketMessageType.Binary ? FrameKind.Binary : FrameKind.Text;
@@ -366,11 +363,11 @@ public sealed class AcwfSessionHandler
     private static async Task SendJsonAsync<T>(
         NativeWebSocket webSocket,
         T message,
-        System.Text.Json.Serialization.Metadata.JsonTypeInfo<T> typeInfo,
+        JsonTypeInfo<T> typeInfo,
         CancellationToken ct)
     {
-        byte[] json = JsonSerializer.SerializeToUtf8Bytes(message, typeInfo);
-        await webSocket.SendAsync(json, WebSocketMessageType.Text, endOfMessage: true, ct).ConfigureAwait(false);
+        var json = JsonSerializer.SerializeToUtf8Bytes(message, typeInfo);
+        await webSocket.SendAsync(json, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
     }
 
     private async Task SendErrorAndCloseAsync(
@@ -409,18 +406,22 @@ public sealed class AcwfSessionHandler
         string description,
         CancellationToken ct)
     {
-        if (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived)
-        {
-            await webSocket.CloseAsync(status, description, ct).ConfigureAwait(false);
-        }
+        if (webSocket.State is WebSocketState.Open or WebSocketState.CloseReceived) await webSocket.CloseAsync(status, description, ct).ConfigureAwait(false);
     }
 
-    private static bool IsKnownMessageType(string type) =>
-        type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
+    private static bool IsKnownMessageType(string type)
+    {
+        return type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
             or MessageType.CleanupConfirmed
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
             or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error
             or MessageType.CleanupDone;
+    }
 
-    private enum FrameKind { Text, Binary, Close }
+    private enum FrameKind
+    {
+        Text,
+        Binary,
+        Close
+    }
 }

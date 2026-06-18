@@ -1,7 +1,7 @@
 namespace ACWF.WebSocket.Messages;
 
 /// <summary>
-/// Constantes string para discriminación de tipos de mensaje WebSocket.
+///     Constantes string para discriminación de tipos de mensaje WebSocket.
 /// </summary>
 public static class MessageType
 {

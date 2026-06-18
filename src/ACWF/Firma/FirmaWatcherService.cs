@@ -1,31 +1,28 @@
 using System.Threading.Channels;
 using ACWF.Configuration;
-using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace ACWF.Firma;
 
 /// <summary>
-/// Observa el WatchDirectory en busca de un PDF firmado (sufijo [F].pdf).
-/// Usa FileSystemWatcher en un thread del pool, Channel&lt;FirmaEvent&gt; para
-/// marshalling seguro de eventos al async session loop.
+///     Observa el WatchDirectory en busca de un PDF firmado (sufijo [F].pdf).
+///     Usa FileSystemWatcher en un thread del pool, Channel&lt;FirmaEvent&gt; para
+///     marshalling seguro de eventos al async session loop.
 /// </summary>
 public sealed class FirmaWatcherService : IFirmaWatcherService
 {
-    private readonly AcwfOptions _options;
-    private readonly ILogger<FirmaWatcherService> _logger;
+    // Delays de exponential backoff: 50, 100, 200, 400, 800 ms (5 retries máximo)
+    private static readonly int[] BackoffDelaysMs = [50, 100, 200, 400, 800];
 
     private readonly Channel<FirmaEvent> _channel = Channel.CreateUnbounded<FirmaEvent>(
         new UnboundedChannelOptions { SingleReader = true });
 
-    private FileSystemWatcher? _watcher;
-    private CancellationTokenSource? _timeoutCts;
+    private readonly ILogger<FirmaWatcherService> _logger;
+    private readonly AcwfOptions _options;
     private string? _expectedFilename;
+    private CancellationTokenSource? _timeoutCts;
 
-    public ChannelReader<FirmaEvent> Events => _channel.Reader;
-
-    // Delays de exponential backoff: 50, 100, 200, 400, 800 ms (5 retries máximo)
-    private static readonly int[] BackoffDelaysMs = [50, 100, 200, 400, 800];
+    private FileSystemWatcher? _watcher;
 
     public FirmaWatcherService(
         IOptions<AcwfOptions> options,
@@ -34,6 +31,8 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
         _options = options.Value;
         _logger = logger;
     }
+
+    public ChannelReader<FirmaEvent> Events => _channel.Reader;
 
     public void StartWatching(string originalFilename)
     {
@@ -61,6 +60,23 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
                 TaskScheduler.Default);
     }
 
+    public async ValueTask DisposeAsync()
+    {
+        _timeoutCts?.Cancel();
+        _timeoutCts?.Dispose();
+        _timeoutCts = null;
+
+        if (_watcher is not null)
+        {
+            _watcher.EnableRaisingEvents = false;
+            _watcher.Dispose();
+            _watcher = null;
+        }
+
+        _channel.Writer.TryComplete();
+        await ValueTask.CompletedTask.ConfigureAwait(false);
+    }
+
     private void OnFileEvent(object sender, FileSystemEventArgs e)
     {
         if (_expectedFilename is null) return;
@@ -79,8 +95,7 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
     private async Task TryReadFileWithRetryAsync(string path)
     {
-        for (int i = 0; i < BackoffDelaysMs.Length; i++)
-        {
+        for (var i = 0; i < BackoffDelaysMs.Length; i++)
             try
             {
                 // Intentar abrir con FileShare.Read para verificar que el archivo es accesible.
@@ -96,12 +111,8 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
                     "Archivo de firma bloqueado (intento {Attempt}/{Max}): {FilePath}",
                     i + 1, BackoffDelaysMs.Length, path);
 
-                if (i < BackoffDelaysMs.Length - 1)
-                {
-                    await Task.Delay(BackoffDelaysMs[i]).ConfigureAwait(false);
-                }
+                if (i < BackoffDelaysMs.Length - 1) await Task.Delay(BackoffDelaysMs[i]).ConfigureAwait(false);
             }
-        }
 
         // Todos los retries agotados.
         _logger.LogError("Archivo de firma aún bloqueado tras todos los reintentos: {FilePath}", path);
@@ -112,32 +123,13 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
     private void OnTimeout(Task completedTask, string originalFilename)
     {
         if (completedTask.IsCanceled)
-        {
             // Archivo detectado antes del timeout — no hacer nada.
             return;
-        }
 
         _logger.LogWarning(
             "FirmaWatcher agotó el tiempo de espera tras {Seconds}s para {Filename}",
             _options.FirmaTimeoutSeconds, originalFilename);
 
         _channel.Writer.TryWrite(new FirmaEvent(FirmaEventType.Timeout, string.Empty));
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        _timeoutCts?.Cancel();
-        _timeoutCts?.Dispose();
-        _timeoutCts = null;
-
-        if (_watcher is not null)
-        {
-            _watcher.EnableRaisingEvents = false;
-            _watcher.Dispose();
-            _watcher = null;
-        }
-
-        _channel.Writer.TryComplete();
-        await ValueTask.CompletedTask.ConfigureAwait(false);
     }
 }
