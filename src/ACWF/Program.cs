@@ -101,6 +101,7 @@ builder.Services.Configure<AcwfOptions>(builder.Configuration.GetSection("Acwf")
 builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("Update"));
 
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
+builder.Services.AddSingleton<IAcwfSessionHandlerFactory, AcwfSessionHandlerFactory>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
@@ -127,7 +128,7 @@ var exePathForScheme = Environment.ProcessPath
                        ?? Assembly.GetExecutingAssembly().Location;
 UriSchemeHelper.EnsureRegistered(uriScheme, exePathForScheme);
 
-// Registrar limpieza en apagado graceful.
+// Registrar limpieza al apagar.
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 lifetime.ApplicationStopping.Register(() =>
 {

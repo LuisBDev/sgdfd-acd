@@ -12,6 +12,7 @@ namespace ACWF.WebSocket;
 /// </summary>
 public sealed class AcwfWebSocketMiddleware
 {
+    private readonly IAcwfSessionHandlerFactory _factory;
     private readonly ILogger<AcwfWebSocketMiddleware> _logger;
     private readonly RequestDelegate _next;
     private readonly AcwfOptions _options;
@@ -23,12 +24,14 @@ public sealed class AcwfWebSocketMiddleware
         ISessionGate sessionGate,
         IOptions<AcwfOptions> options,
         ILogger<AcwfWebSocketMiddleware> logger,
+        IAcwfSessionHandlerFactory factory,
         IServiceProvider sp)
     {
         _next = next;
         _sessionGate = sessionGate;
         _options = options.Value;
         _logger = logger;
+        _factory = factory;
         _sp = sp;
     }
 
@@ -41,7 +44,7 @@ public sealed class AcwfWebSocketMiddleware
             return;
         }
 
-        // Non-WS request on /acwf → health check (no session gate).
+        // Solicitud no-WebSocket en /acwf → health check (sin session gate).
         if (!context.WebSockets.IsWebSocketRequest)
         {
             var origin = context.Request.Headers.Origin.ToString();
@@ -69,7 +72,7 @@ public sealed class AcwfWebSocketMiddleware
             return;
         }
 
-        // Intentar adquirir el single-session gate.
+        // Intentar adquirir el bloqueo de sesión única.
         var acquired = await _sessionGate.TryAcquireAsync(context.RequestAborted);
 
         if (!acquired)
@@ -86,7 +89,6 @@ public sealed class AcwfWebSocketMiddleware
 
         // Crear un DI scope para esta sesión (scoped services: FileDepositService, FirmaWatcherService).
         await using var scope = _sp.CreateAsyncScope();
-        var depositService = scope.ServiceProvider.GetRequiredService<IFileDepositService>();
         var watcherService = scope.ServiceProvider.GetRequiredService<IFirmaWatcherService>();
 
         var sessionId = Guid.NewGuid().ToString("N");
@@ -97,7 +99,7 @@ public sealed class AcwfWebSocketMiddleware
             webSocket = await context.WebSockets.AcceptWebSocketAsync();
             _logger.LogInformation("Sesión WebSocket abierta: {SessionId}", sessionId);
 
-            var handler = new AcwfSessionHandler(depositService, watcherService, _logger, sessionId, _options.WatchDirectory, _options.FirmaTimeoutSeconds);
+            var handler = _factory.Create(sessionId, webSocket, scope);
             await handler.HandleAsync(webSocket, context.RequestAborted);
         }
         finally
