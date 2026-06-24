@@ -41,7 +41,7 @@ public static class PortRegistry
         }
         catch (IOException)
         {
-            // Archivo advisory — tragar errores de eliminación.
+            // Archivo advisory — ignorar errores de eliminación.
         }
     }
 

@@ -65,7 +65,7 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Esperar a que el agente se estabilice antes del primer check.
+        // Esperar estabilización antes de la primera verificación.
         await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken).ConfigureAwait(false);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -92,8 +92,8 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
                 "Verificando actualizaciones en {RepoUrl} (canal={Channel}, prerelease={Pre})",
                 _options.RepoUrl, _options.Channel, _options.IncludePrerelease);
 
-            // Fuente de GitHub Releases: lee la API de releases del repo.
-            // prerelease=true hace que la variante dev considere releases marcados como pre-release.
+            // Fuente GitHub Releases: consulta la API pública del repositorio.
+            // prerelease=true permite que la variante dev incluya versiones pre-release.
             var source = new GithubSource(
                 _options.RepoUrl,
                 string.IsNullOrWhiteSpace(_options.AccessToken) ? null : _options.AccessToken,
@@ -136,8 +136,7 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
         }
         catch (Exception ex)
         {
-            // _logger.LogError(ex, "Error during update check/download");
-            _logger.LogInformation("Update check/download feature no disponible aún: {Message}", ex.Message);
+            _logger.LogInformation("La verificación de actualizaciones aún no está disponible: {Message}", ex.Message);
         }
     }
 }

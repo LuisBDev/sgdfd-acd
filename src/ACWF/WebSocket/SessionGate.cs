@@ -2,7 +2,7 @@ namespace ACWF.WebSocket;
 
 /// <summary>
 ///     Gate thread-safe singleton que asegura a lo sumo una sesión WebSocket activa.
-///     Usa SemaphoreSlim(1,1) para atomic check-and-acquire.
+///     Usa SemaphoreSlim(1,1) para adquisición atómica.
 /// </summary>
 public sealed class SessionGate : ISessionGate
 {

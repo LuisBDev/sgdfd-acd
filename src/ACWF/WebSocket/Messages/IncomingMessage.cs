@@ -11,7 +11,7 @@ public sealed record AuthMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("token")] string Token);
 
-/// <summary>PDF_DOWNLOAD — anuncia el incoming PDF binary frame. El siguiente frame es binario.</summary>
+/// <summary>PDF_DOWNLOAD — anuncia la recepción del PDF. El siguiente frame contiene los datos binarios.</summary>
 public sealed record PdfDownloadMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("filename")]
