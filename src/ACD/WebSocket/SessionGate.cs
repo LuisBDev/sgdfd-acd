@@ -1,4 +1,4 @@
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 /// <summary>
 ///     Gate thread-safe singleton que asegura a lo sumo una sesión WebSocket activa.

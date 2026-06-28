@@ -1,4 +1,4 @@
-namespace ACWF.Configuration;
+namespace ACD.Configuration;
 
 public sealed class UpdateOptions
 {

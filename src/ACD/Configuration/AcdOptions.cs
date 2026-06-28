@@ -1,6 +1,6 @@
-namespace ACWF.Configuration;
+namespace ACD.Configuration;
 
-public sealed class AcwfOptions
+public sealed class AcdOptions
 {
     public int Port { get; init; } = 7272;
     public string WatchDirectory { get; init; } = @"C:\TFIRMA";

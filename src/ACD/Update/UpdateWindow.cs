@@ -1,7 +1,7 @@
-using ACWF.WebSocket;
+using ACD.WebSocket;
 using Timer = System.Windows.Forms.Timer;
 
-namespace ACWF.Update;
+namespace ACD.Update;
 
 /// <summary>
 ///     Ventana WinForms no-modal que muestra el estado del update y permite al usuario aplicar un update pendiente.
@@ -24,7 +24,7 @@ public sealed class UpdateWindow : Form
         _updateTrigger = updateTrigger;
         _sessionGate = sessionGate;
 
-        Text = "ACWF — Update";
+        Text = "ACD — Update";
         Width = 400;
         Height = 220;
         FormBorderStyle = FormBorderStyle.FixedDialog;

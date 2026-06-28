@@ -1,17 +1,17 @@
-namespace ACWF.WebSocket.Messages;
+namespace ACD.WebSocket.Messages;
 
 /// <summary>
 ///     Constantes string para discriminación de tipos de mensaje WebSocket.
 /// </summary>
 public static class MessageType
 {
-    // Incoming (MFD → ACWF)
+    // Incoming (MFD → ACD)
     public const string Auth = "AUTH";
     public const string PdfDownload = "PDF_DOWNLOAD";
     public const string RequestSignedFile = "REQUEST_SIGNED_FILE";
     public const string CleanupConfirmed = "CLEANUP_CONFIRMED";
 
-    // Outgoing (ACWF → MFD)
+    // Outgoing (ACD → MFD)
     public const string AuthOk = "AUTH_OK";
     public const string Connected = "CONNECTED";
     public const string PdfReceived = "PDF_RECEIVED";

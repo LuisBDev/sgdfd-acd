@@ -1,8 +1,8 @@
 using System.Threading.Channels;
-using ACWF.Configuration;
+using ACD.Configuration;
 using Microsoft.Extensions.Options;
 
-namespace ACWF.Firma;
+namespace ACD.Firma;
 
 /// <summary>
 ///     Observa el WatchDirectory en busca de un PDF firmado (sufijo [F].pdf).
@@ -18,14 +18,14 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
         new UnboundedChannelOptions { SingleReader = true });
 
     private readonly ILogger<FirmaWatcherService> _logger;
-    private readonly AcwfOptions _options;
+    private readonly AcdOptions _options;
     private string? _expectedFilename;
     private CancellationTokenSource? _timeoutCts;
 
     private FileSystemWatcher? _watcher;
 
     public FirmaWatcherService(
-        IOptions<AcwfOptions> options,
+        IOptions<AcdOptions> options,
         ILogger<FirmaWatcherService> logger)
     {
         _options = options.Value;

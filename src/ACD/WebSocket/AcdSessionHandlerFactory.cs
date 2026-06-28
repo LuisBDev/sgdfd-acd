@@ -1,30 +1,30 @@
-using ACWF.Configuration;
-using ACWF.Firma;
+using ACD.Configuration;
+using ACD.Firma;
 using Microsoft.Extensions.Options;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 /// <summary>
-///     Fábrica singleton que compone AcwfSessionHandler con sus dependencias por sesión.
+///     Fábrica singleton que compone AcdSessionHandler con sus dependencias por sesión.
 ///     Resuelve servicios scoped (IFileDepositService, IFirmaWatcherService) desde el scope inyectado.
 /// </summary>
-public sealed class AcwfSessionHandlerFactory : IAcwfSessionHandlerFactory
+public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
     private readonly ILoggerFactory _loggerFactory;
-    private readonly AcwfOptions _options;
+    private readonly AcdOptions _options;
 
-    public AcwfSessionHandlerFactory(IOptions<AcwfOptions> options, ILoggerFactory loggerFactory)
+    public AcdSessionHandlerFactory(IOptions<AcdOptions> options, ILoggerFactory loggerFactory)
     {
         _options = options.Value;
         _loggerFactory = loggerFactory;
     }
 
-    public AcwfSessionHandler Create(string sessionId, NativeWebSocket webSocket, IServiceScope scope)
+    public AcdSessionHandler Create(string sessionId, NativeWebSocket webSocket, IServiceScope scope)
     {
         var depositService = scope.ServiceProvider.GetRequiredService<IFileDepositService>();
         var watcherService = scope.ServiceProvider.GetRequiredService<IFirmaWatcherService>();
-        var logger = _loggerFactory.CreateLogger<AcwfSessionHandler>();
+        var logger = _loggerFactory.CreateLogger<AcdSessionHandler>();
 
         var firmaHandler = new FirmaWorkflowHandler(
             depositService,
@@ -35,6 +35,6 @@ public sealed class AcwfSessionHandlerFactory : IAcwfSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcwfSessionHandler(firmaHandler, logger, sessionId, _options.WatchDirectory);
+        return new AcdSessionHandler(firmaHandler, logger, sessionId, _options.WatchDirectory);
     }
 }

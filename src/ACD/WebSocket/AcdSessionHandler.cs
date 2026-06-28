@@ -1,17 +1,17 @@
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Text.Json;
-using ACWF.Firma;
-using ACWF.WebSocket.Messages;
+using ACD.Firma;
+using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 /// <summary>
 ///     Maneja el ciclo de vida completo de una sesión WebSocket vía una state machine.
-///     Se instancia por sesión desde AcwfWebSocketMiddleware a través de IAcwfSessionHandlerFactory.
+///     Se instancia por sesión desde AcdWebSocketMiddleware a través de IAcdSessionHandlerFactory.
 /// </summary>
-public sealed class AcwfSessionHandler
+public sealed class AcdSessionHandler
 {
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
@@ -24,7 +24,7 @@ public sealed class AcwfSessionHandler
 
     private SessionState _state = SessionState.Connected;
 
-    public AcwfSessionHandler(
+    public AcdSessionHandler(
         FirmaWorkflowHandler firmaHandler,
         ILogger logger,
         string sessionId,
@@ -47,7 +47,7 @@ public sealed class AcwfSessionHandler
                 AgentVersion,
                 "READY",
                 _watchDirectory);
-            await WebSocketTransport.SendJsonAsync(webSocket, connected, AcwfJsonContext.Default.ConnectedMessage, ct);
+            await WebSocketTransport.SendJsonAsync(webSocket, connected, AcdJsonContext.Default.ConnectedMessage, ct);
 
             // Loop principal de la state machine.
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -76,7 +76,7 @@ public sealed class AcwfSessionHandler
                 // Text frame — deserializar y despachar.
                 if (payload is null) continue;
 
-                var baseMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.BaseMessage);
+                var baseMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.BaseMessage);
                 if (baseMsg is null)
                 {
                     await WebSocketTransport.SendErrorAndCloseAsync(webSocket, "UNKNOWN_MESSAGE_TYPE", "Could not parse message type", 1011, _logger, _sessionId, ct);
@@ -129,12 +129,12 @@ public sealed class AcwfSessionHandler
         {
             // Estado CONNECTED: solo AUTH es válido.
             case (SessionState.Connected, MessageType.Auth):
-                var authMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.AuthMessage);
+                var authMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.AuthMessage);
                 if (authMsg is null) break;
                 _authToken = authMsg.Token;
                 _state = SessionState.Authenticated;
                 _logger.LogInformation("[{SessionId}] AUTH recibido, estado -> Authenticated", _sessionId);
-                await WebSocketTransport.SendJsonAsync(webSocket, new AuthOkMessage(), AcwfJsonContext.Default.AuthOkMessage, ct);
+                await WebSocketTransport.SendJsonAsync(webSocket, new AuthOkMessage(), AcdJsonContext.Default.AuthOkMessage, ct);
                 break;
 
             case (SessionState.Connected, _):
@@ -144,7 +144,7 @@ public sealed class AcwfSessionHandler
 
             // Estado AUTHENTICATED: solo PDF_DOWNLOAD es válido.
             case (SessionState.Authenticated, MessageType.PdfDownload):
-                var pdfMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.PdfDownloadMessage);
+                var pdfMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.PdfDownloadMessage);
                 if (pdfMsg is null) break;
                 _firmaHandler.SetCurrentFilename(pdfMsg.Filename);
                 _state = SessionState.ReceivingFile;
@@ -155,7 +155,7 @@ public sealed class AcwfSessionHandler
 
             // Estado WATCHING: REQUEST_SIGNED_FILE es válido.
             case (SessionState.WatchingFirma, MessageType.RequestSignedFile):
-                var reqMsg = JsonSerializer.Deserialize(payload, AcwfJsonContext.Default.RequestSignedFileMessage);
+                var reqMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.RequestSignedFileMessage);
                 if (reqMsg is null) break;
                 _state = SessionState.SendingFile;
                 _logger.LogInformation("[{SessionId}] REQUEST_SIGNED_FILE recibido, estado -> SendingFile", _sessionId);
@@ -166,7 +166,7 @@ public sealed class AcwfSessionHandler
             case (SessionState.WaitingCleanupConfirm, MessageType.CleanupConfirmed):
                 _logger.LogInformation("[{SessionId}] CLEANUP_CONFIRMED recibido, eliminando archivos", _sessionId);
                 _firmaHandler.Cleanup();
-                await WebSocketTransport.SendJsonAsync(webSocket, new CleanupDoneMessage(), AcwfJsonContext.Default.CleanupDoneMessage, ct);
+                await WebSocketTransport.SendJsonAsync(webSocket, new CleanupDoneMessage(), AcdJsonContext.Default.CleanupDoneMessage, ct);
                 await WebSocketTransport.CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Cleanup complete", ct);
                 _state = SessionState.Idle;
                 return;

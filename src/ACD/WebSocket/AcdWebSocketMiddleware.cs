@@ -1,30 +1,30 @@
-using ACWF.Configuration;
-using ACWF.Firma;
+using ACD.Configuration;
+using ACD.Firma;
 using Microsoft.Extensions.Options;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 using WebSocketCloseStatus = System.Net.WebSockets.WebSocketCloseStatus;
 
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 /// <summary>
-///     Middleware de ASP.NET Core que maneja WebSocket upgrades en /acwf.
-///     Aplica validación de Origin, single-session gate, y delega a AcwfSessionHandler.
+///     Middleware de ASP.NET Core que maneja WebSocket upgrades en /acd.
+///     Aplica validación de Origin, single-session gate, y delega a AcdSessionHandler.
 /// </summary>
-public sealed class AcwfWebSocketMiddleware
+public sealed class AcdWebSocketMiddleware
 {
-    private readonly IAcwfSessionHandlerFactory _factory;
-    private readonly ILogger<AcwfWebSocketMiddleware> _logger;
+    private readonly IAcdSessionHandlerFactory _factory;
+    private readonly ILogger<AcdWebSocketMiddleware> _logger;
     private readonly RequestDelegate _next;
-    private readonly AcwfOptions _options;
+    private readonly AcdOptions _options;
     private readonly ISessionGate _sessionGate;
     private readonly IServiceProvider _sp;
 
-    public AcwfWebSocketMiddleware(
+    public AcdWebSocketMiddleware(
         RequestDelegate next,
         ISessionGate sessionGate,
-        IOptions<AcwfOptions> options,
-        ILogger<AcwfWebSocketMiddleware> logger,
-        IAcwfSessionHandlerFactory factory,
+        IOptions<AcdOptions> options,
+        ILogger<AcdWebSocketMiddleware> logger,
+        IAcdSessionHandlerFactory factory,
         IServiceProvider sp)
     {
         _next = next;
@@ -37,14 +37,14 @@ public sealed class AcwfWebSocketMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
-        // Solo manejar requests al endpoint /acwf.
-        if (!context.Request.Path.Equals("/acwf", StringComparison.OrdinalIgnoreCase))
+        // Solo manejar requests al endpoint /acd.
+        if (!context.Request.Path.Equals("/acd", StringComparison.OrdinalIgnoreCase))
         {
             await _next(context);
             return;
         }
 
-        // Solicitud no-WebSocket en /acwf → health check (sin session gate).
+        // Solicitud no-WebSocket en /acd → health check (sin session gate).
         if (!context.WebSockets.IsWebSocketRequest)
         {
             var origin = context.Request.Headers.Origin.ToString();

@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace ACWF.WebSocket.Messages;
+namespace ACD.WebSocket.Messages;
 
 [JsonSourceGenerationOptions(PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(BaseMessage))]
@@ -16,6 +16,6 @@ namespace ACWF.WebSocket.Messages;
 [JsonSerializable(typeof(ErrorMessage))]
 [JsonSerializable(typeof(CleanupConfirmedMessage))]
 [JsonSerializable(typeof(CleanupDoneMessage))]
-public partial class AcwfJsonContext : JsonSerializerContext
+public partial class AcdJsonContext : JsonSerializerContext
 {
 }

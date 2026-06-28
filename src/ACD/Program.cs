@@ -1,15 +1,15 @@
 using System.Reflection;
-using ACWF.Configuration;
-using ACWF.Firma;
-using ACWF.Hosting;
-using ACWF.Tray;
-using ACWF.Update;
-using ACWF.WebSocket;
+using ACD.Configuration;
+using ACD.Firma;
+using ACD.Hosting;
+using ACD.Tray;
+using ACD.Update;
+using ACD.WebSocket;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Velopack;
 // Alias para evitar ambigüedad con Velopack.UpdateOptions
-using AppUpdateOptions = ACWF.Configuration.UpdateOptions;
+using AppUpdateOptions = ACD.Configuration.UpdateOptions;
 
 // Inicialización de Velopack — DEBE ser la primera instrucción.
 // Maneja eventos de ciclo de vida install/update/uninstall y puede salir del proceso.
@@ -17,33 +17,33 @@ VelopackApp.Build()
     .OnFirstRun(_ =>
     {
         var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
-        UriSchemeHelper.EnsureRegistered("acwf", exePath);
-        UriSchemeHelper.EnsureRegistered("acwf-dev", exePath);
+        UriSchemeHelper.EnsureRegistered("acd", exePath);
+        UriSchemeHelper.EnsureRegistered("acd-dev", exePath);
     })
     .OnAfterUpdateFastCallback(_ =>
     {
         var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
-        UriSchemeHelper.EnsureRegistered("acwf", exePath);
-        UriSchemeHelper.EnsureRegistered("acwf-dev", exePath);
+        UriSchemeHelper.EnsureRegistered("acd", exePath);
+        UriSchemeHelper.EnsureRegistered("acd-dev", exePath);
     })
     .OnBeforeUninstallFastCallback(_ =>
     {
-        UriSchemeHelper.Unregister("acwf");
-        UriSchemeHelper.Unregister("acwf-dev");
+        UriSchemeHelper.Unregister("acd");
+        UriSchemeHelper.Unregister("acd-dev");
     })
     .Run();
 
 // Si se lanzó vía URI scheme, inferir el environment del nombre del scheme.
 var uriArg = args.SkipWhile(a => a != "--uri-invoke").Skip(1).FirstOrDefault();
-if (uriArg is not null && uriArg.StartsWith("acwf-dev", StringComparison.OrdinalIgnoreCase))
+if (uriArg is not null && uriArg.StartsWith("acd-dev", StringComparison.OrdinalIgnoreCase))
     Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
 
-// Variante incrustada en el build (AssemblyMetadata "AcwfVariant": Dev | Prod).
+// Variante incrustada en el build (AssemblyMetadata "AcdVariant": Dev | Prod).
 // Es el SOF para un build INSTALADO, que no tiene ASPNETCORE_ENVIRONMENT.
 // Solo aplica si el environment no fue fijado antes (por URI o por env var en dotnet run).
 var bakedVariant = Assembly.GetEntryAssembly()?
                        .GetCustomAttributes<AssemblyMetadataAttribute>()
-                       .FirstOrDefault(a => a.Key == "AcwfVariant")?.Value
+                       .FirstOrDefault(a => a.Key == "AcdVariant")?.Value
                    ?? "Prod";
 
 if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") is null
@@ -58,12 +58,12 @@ var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
           ?? "Production";
 
 var packId = string.Equals(env, "Development", StringComparison.OrdinalIgnoreCase)
-    ? "ACWF-Dev"
-    : "ACWF";
+    ? "ACD-Dev"
+    : "ACD";
 
 var uriScheme = string.Equals(env, "Development", StringComparison.OrdinalIgnoreCase)
-    ? "acwf-dev"
-    : "acwf";
+    ? "acd-dev"
+    : "acd";
 
 var mutexSuffix = string.Equals(env, "Development", StringComparison.OrdinalIgnoreCase)
     ? "Dev"
@@ -76,7 +76,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.WebHost.UseKestrel(o =>
 {
-    var port = builder.Configuration.GetValue("Acwf:Port", 7272);
+    var port = builder.Configuration.GetValue("Acd:Port", 7272);
     o.ListenLocalhost(port);
 });
 
@@ -89,7 +89,7 @@ builder.Host.UseSerilog((ctx, cfg) =>
 {
     cfg.ReadFrom.Configuration(ctx.Configuration)
         .WriteTo.File(
-            Path.Combine(logDir, "acwf-.log"),
+            Path.Combine(logDir, "acd-.log"),
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: 7,
             fileSizeLimitBytes: 10_000_000);
@@ -97,11 +97,11 @@ builder.Host.UseSerilog((ctx, cfg) =>
     cfg.WriteTo.Console();
 });
 
-builder.Services.Configure<AcwfOptions>(builder.Configuration.GetSection("Acwf"));
+builder.Services.Configure<AcdOptions>(builder.Configuration.GetSection("Acd"));
 builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("Update"));
 
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
-builder.Services.AddSingleton<IAcwfSessionHandlerFactory, AcwfSessionHandlerFactory>();
+builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactory>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
@@ -118,11 +118,11 @@ builder.Services.AddSingleton(sp => new Lazy<IUpdateTrigger>(() => sp.GetRequire
 
 var app = builder.Build();
 app.UseWebSockets();
-app.UseMiddleware<AcwfWebSocketMiddleware>();
+app.UseMiddleware<AcdWebSocketMiddleware>();
 
 // Escribir el archivo lock del puerto y registrar el URI scheme (idempotente en cada ejecución).
-var acwfOptions = app.Services.GetRequiredService<IOptions<AcwfOptions>>().Value;
-PortRegistry.Write(packId, acwfOptions.Port);
+var acdOptions = app.Services.GetRequiredService<IOptions<AcdOptions>>().Value;
+PortRegistry.Write(packId, acdOptions.Port);
 
 var exePathForScheme = Environment.ProcessPath
                        ?? Assembly.GetExecutingAssembly().Location;
@@ -137,8 +137,8 @@ lifetime.ApplicationStopping.Register(() =>
 });
 
 app.Logger.LogInformation(
-    "ACWF v{Version} starting — environment: {Env}, packId: {PackId}, port: {Port}",
+    "ACD v{Version} starting — environment: {Env}, packId: {PackId}, port: {Port}",
     Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0",
-    env, packId, acwfOptions.Port);
+    env, packId, acdOptions.Port);
 
 app.Run();

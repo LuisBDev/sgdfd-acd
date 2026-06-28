@@ -1,12 +1,12 @@
-using ACWF.Tray;
+using ACD.Tray;
 using Microsoft.Extensions.Options;
 using Velopack;
 using Velopack.Sources;
 // Evitar ambigüedad con Velopack.UpdateOptions
-using AppUpdateOptions = ACWF.Configuration.UpdateOptions;
+using AppUpdateOptions = ACD.Configuration.UpdateOptions;
 using VelopackUpdateOptions = Velopack.UpdateOptions;
 
-namespace ACWF.Update;
+namespace ACD.Update;
 
 /// <summary>
 ///     Background service que periódicamente busca updates de Velopack.

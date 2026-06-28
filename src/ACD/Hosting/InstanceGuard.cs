@@ -1,4 +1,4 @@
-namespace ACWF.Hosting;
+namespace ACD.Hosting;
 
 /// <summary>
 ///     Aplica comportamiento de single-instance por environment usando un named global Mutex.
@@ -14,7 +14,7 @@ public static class InstanceGuard
     /// <returns>Un <see cref="IDisposable" /> que libera el mutex al hacer dispose.</returns>
     public static IDisposable Acquire(string environment)
     {
-        var mutexName = $"Global\\ACWF-{environment}";
+        var mutexName = $"Global\\ACD-{environment}";
         var mutex = new Mutex(true, mutexName, out var isNewInstance);
 
         if (!isNewInstance)

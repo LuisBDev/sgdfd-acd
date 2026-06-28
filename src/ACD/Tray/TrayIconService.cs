@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Reflection;
-using ACWF.Configuration;
-using ACWF.Update;
+using ACD.Configuration;
+using ACD.Update;
 using Microsoft.Extensions.Options;
 
-namespace ACWF.Tray;
+namespace ACD.Tray;
 
 /// <summary>
 ///     Aloja el NotifyIcon en un thread STA dedicado.
@@ -15,7 +15,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 {
     private readonly IHostApplicationLifetime _lifetime;
     private readonly ILogger<TrayIconService> _logger;
-    private readonly IOptions<AcwfOptions> _options;
+    private readonly IOptions<AcdOptions> _options;
 
     private readonly TaskCompletionSource _staReady = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Lazy<IUpdateTrigger> _updateTrigger;
@@ -32,7 +32,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
     public TrayIconService(
         IHostApplicationLifetime lifetime,
-        IOptions<AcwfOptions> options,
+        IOptions<AcdOptions> options,
         ILogger<TrayIconService> logger,
         Lazy<IUpdateTrigger> updateTrigger)
     {
@@ -115,7 +115,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
             if (_updateItem is not null) _updateItem.Text = $"Update ready: {version}";
             _notifyIcon?.ShowBalloonTip(
                 5000,
-                "ACWF Update Ready",
+                "ACD Update Ready",
                 $"Version {version} is ready to install.",
                 ToolTipIcon.Info);
         }, null);
@@ -146,7 +146,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
         _notifyIcon = new NotifyIcon
         {
-            Text = "ACWF",
+            Text = "ACD",
             Visible = true,
             Icon = CreateIcon(TrayState.Ready)
         };

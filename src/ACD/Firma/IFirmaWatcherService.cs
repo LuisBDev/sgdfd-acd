@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace ACWF.Firma;
+namespace ACD.Firma;
 
 public enum FirmaEventType
 {

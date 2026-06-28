@@ -1,15 +1,15 @@
 using System.Net.WebSockets;
-using ACWF.WebSocket;
-using ACWF.WebSocket.Messages;
+using ACD.WebSocket;
+using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
-namespace ACWF.Firma;
+namespace ACD.Firma;
 
 /// <summary>
 ///     Orquesta el flujo de firma: depósito del frame binario, inicio del watcher,
 ///     consumo concurrente de eventos y envío del archivo firmado.
 ///     No posee las transiciones de estado — cada método retorna el siguiente SessionState
-///     y el llamador (AcwfSessionHandler) lo aplica.
+///     y el llamador (AcdSessionHandler) lo aplica.
 /// </summary>
 public sealed class FirmaWorkflowHandler
 {
@@ -78,7 +78,7 @@ public sealed class FirmaWorkflowHandler
         }
 
         // Confirmar recepción y comenzar a vigilar.
-        await WebSocketTransport.SendJsonAsync(ws, new PdfReceivedMessage(CurrentFilename), AcwfJsonContext.Default.PdfReceivedMessage, ct);
+        await WebSocketTransport.SendJsonAsync(ws, new PdfReceivedMessage(CurrentFilename), AcdJsonContext.Default.PdfReceivedMessage, ct);
 
         _watcherService.StartWatching(CurrentFilename, _firmaSignedSuffix);
         _logger.LogInformation("[{SessionId}] Archivo escrito en {Path}, estado -> WatchingFirma", _sessionId, filePath);
@@ -100,7 +100,7 @@ public sealed class FirmaWorkflowHandler
                         _firmaFilePath = firmaEvent.FilePath;
                         var signedFilename = Path.GetFileName(firmaEvent.FilePath);
                         _logger.LogInformation("[{SessionId}] FIRMA_DISPONIBLE: {File}", _sessionId, signedFilename);
-                        await WebSocketTransport.SendJsonAsync(ws, new FirmaDisponibleMessage(signedFilename), AcwfJsonContext.Default.FirmaDisponibleMessage, ct);
+                        await WebSocketTransport.SendJsonAsync(ws, new FirmaDisponibleMessage(signedFilename), AcdJsonContext.Default.FirmaDisponibleMessage, ct);
                         // El estado WatchingFirma se mantiene hasta REQUEST_SIGNED_FILE.
                         break;
 
@@ -108,7 +108,7 @@ public sealed class FirmaWorkflowHandler
                         _logger.LogWarning("[{SessionId}] FirmaWatcher agotó el tiempo de espera para {Filename}", _sessionId, CurrentFilename);
                         await WebSocketTransport.SendJsonAsync(ws,
                             new FirmaTimeoutMessage(CurrentFilename ?? string.Empty, _firmaTimeoutSeconds),
-                            AcwfJsonContext.Default.FirmaTimeoutMessage, ct);
+                            AcdJsonContext.Default.FirmaTimeoutMessage, ct);
                         await WebSocketTransport.CloseWebSocketAsync(ws, WebSocketCloseStatus.NormalClosure, "Firma timeout", ct);
                         return;
 
@@ -155,7 +155,7 @@ public sealed class FirmaWorkflowHandler
         // Frame 1: metadatos.
         await WebSocketTransport.SendJsonAsync(ws,
             new SignedFileMessage(Path.GetFileName(filePath), fileSize),
-            AcwfJsonContext.Default.SignedFileMessage, ct);
+            AcdJsonContext.Default.SignedFileMessage, ct);
 
         // Frame 2: contenido del archivo en fragmentos de 64 KB.
         try

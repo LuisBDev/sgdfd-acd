@@ -1,8 +1,8 @@
-using ACWF.Configuration;
-using ACWF.Tray;
+using ACD.Configuration;
+using ACD.Tray;
 using Microsoft.Extensions.Options;
 
-namespace ACWF.Firma;
+namespace ACD.Firma;
 
 /// <summary>
 ///     Escribe los bytes del PDF recibido en el watch directory configurado (default C:\TFIRMA).
@@ -12,12 +12,12 @@ public sealed class FileDepositService : IFileDepositService
 {
     private const int WriteBufferSize = 64 * 1024; // 64 KB
     private readonly ILogger<FileDepositService> _logger;
-    private readonly AcwfOptions _options;
+    private readonly AcdOptions _options;
     private readonly ITrayStateNotifier _trayNotifier;
     private bool _dirUnavailable;
 
     public FileDepositService(
-        IOptions<AcwfOptions> options,
+        IOptions<AcdOptions> options,
         ITrayStateNotifier trayNotifier,
         ILogger<FileDepositService> logger)
     {

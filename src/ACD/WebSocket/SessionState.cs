@@ -1,4 +1,4 @@
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 public enum SessionState
 {

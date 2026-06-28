@@ -1,4 +1,4 @@
-namespace ACWF.Update;
+namespace ACD.Update;
 
 public interface IUpdateTrigger
 {

@@ -1,9 +1,9 @@
 using Microsoft.Win32;
 
-namespace ACWF.Hosting;
+namespace ACD.Hosting;
 
 /// <summary>
-///     Administra las entradas del registro de Windows para el URI scheme de ACWF (acwf:// y acwf-dev://).
+///     Administra las entradas del registro de Windows para el URI scheme de ACD (acd:// y acd-dev://).
 ///     Las operaciones son idempotentes — seguro llamarlas en cada launch y update.
 /// </summary>
 public static class UriSchemeHelper

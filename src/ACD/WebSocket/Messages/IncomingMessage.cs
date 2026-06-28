@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace ACWF.WebSocket.Messages;
+namespace ACD.WebSocket.Messages;
 
 /// <summary>Record discriminador usado para leer el campo "type" antes de la deserialización completa.</summary>
 public sealed record BaseMessage(
@@ -24,6 +24,6 @@ public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("filename")]
     string Filename);
 
-/// <summary>CLEANUP_CONFIRMED — el frontend confirma que el upload al backend fue exitoso; ACWF puede borrar los PDFs.</summary>
+/// <summary>CLEANUP_CONFIRMED — el frontend confirma que el upload al backend fue exitoso; ACD puede borrar los PDFs.</summary>
 public sealed record CleanupConfirmedMessage(
     [property: JsonPropertyName("type")] string Type);

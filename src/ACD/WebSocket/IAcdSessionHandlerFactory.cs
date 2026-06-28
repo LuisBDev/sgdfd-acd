@@ -1,8 +1,8 @@
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
-public interface IAcwfSessionHandlerFactory
+public interface IAcdSessionHandlerFactory
 {
-    AcwfSessionHandler Create(string sessionId, NativeWebSocket webSocket, IServiceScope scope);
+    AcdSessionHandler Create(string sessionId, NativeWebSocket webSocket, IServiceScope scope);
 }

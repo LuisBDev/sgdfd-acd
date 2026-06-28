@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace ACWF.WebSocket.Messages;
+namespace ACD.WebSocket.Messages;
 
 /// <summary>CONNECTED — enviado inmediatamente después del WebSocket upgrade, antes que cualquier otro mensaje.</summary>
 public sealed record ConnectedMessage(

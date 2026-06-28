@@ -1,10 +1,10 @@
 using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
-using ACWF.WebSocket.Messages;
+using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
-namespace ACWF.WebSocket;
+namespace ACD.WebSocket;
 
 /// <summary>
 ///     Funciones auxiliares para E/S de frames WebSocket. Sin estado interno.
@@ -59,7 +59,7 @@ public static class WebSocketTransport
         {
             await SendJsonAsync(webSocket,
                 new ErrorMessage(code, message),
-                AcwfJsonContext.Default.ErrorMessage, ct);
+                AcdJsonContext.Default.ErrorMessage, ct);
 
             var status = closeCode switch
             {
