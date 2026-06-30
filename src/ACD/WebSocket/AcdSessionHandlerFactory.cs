@@ -39,7 +39,6 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             _options.Firma,
             _options.WatchDirectory,
             _options.FirmaTimeoutSeconds,
-            _options.FirmaSignedSuffix,
             logger,
             sessionId);
 

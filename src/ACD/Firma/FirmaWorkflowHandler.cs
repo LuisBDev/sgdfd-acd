@@ -18,7 +18,6 @@ public sealed class FirmaWorkflowHandler
     private readonly IFileDepositService _depositService;
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly FirmaOptions _firmaOptions;
-    private readonly string _firmaSignedSuffix;
     private readonly int _firmaTimeoutSeconds;
     private readonly ILogger _logger;
     private readonly string _sessionId;
@@ -34,7 +33,6 @@ public sealed class FirmaWorkflowHandler
         FirmaOptions firmaOptions,
         string watchDirectory,
         int firmaTimeoutSeconds,
-        string firmaSignedSuffix,
         ILogger logger,
         string sessionId)
     {
@@ -44,7 +42,6 @@ public sealed class FirmaWorkflowHandler
         _firmaOptions = firmaOptions;
         _watchDirectory = watchDirectory;
         _firmaTimeoutSeconds = firmaTimeoutSeconds;
-        _firmaSignedSuffix = firmaSignedSuffix;
         _logger = logger;
         _sessionId = sessionId;
     }
@@ -97,7 +94,7 @@ public sealed class FirmaWorkflowHandler
         }
 
         // Armar el watcher antes de lanzar, para no perder el evento del [F].pdf.
-        _watcherService.StartWatching(CurrentFilename, _firmaSignedSuffix);
+        _watcherService.StartWatching(CurrentFilename, FirmaTipo.SignedSuffix(_requestedTipo));
         _logger.LogInformation("[{SessionId}] Archivo escrito en {Path}, estado -> WatchingFirma", _sessionId, filePath);
 
         var firmaRequest = new FirmaRequest(
@@ -233,6 +230,6 @@ public sealed class FirmaWorkflowHandler
     public void Cleanup()
     {
         if (CurrentFilename is not null)
-            _depositService.Cleanup(CurrentFilename, _firmaSignedSuffix);
+            _depositService.Cleanup(CurrentFilename, FirmaTipo.SignedSuffix(_requestedTipo));
     }
 }
