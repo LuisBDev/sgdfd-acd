@@ -63,9 +63,3 @@ public sealed record ErrorMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.Error;
 }
-
-/// <summary>CLEANUP_DONE — confirma que los PDFs fueron eliminados de TFIRMA.</summary>
-public sealed record CleanupDoneMessage
-{
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.CleanupDone;
-}

@@ -217,19 +217,13 @@ public sealed class FirmaWorkflowHandler
             return SessionState.Closed;
         }
 
-        _logger.LogInformation("[{SessionId}] SIGNED_FILE enviado, esperando CLEANUP_CONFIRMED", _sessionId);
-        return SessionState.WaitingCleanupConfirm;
+        _logger.LogInformation("[{SessionId}] SIGNED_FILE enviado, flujo de firma completo", _sessionId);
+        return SessionState.Idle;
     }
 
     public void SetCurrentFilename(string filename, string? tipo = null)
     {
         CurrentFilename = filename;
         _requestedTipo = tipo;
-    }
-
-    public void Cleanup()
-    {
-        if (CurrentFilename is not null)
-            _depositService.Cleanup(CurrentFilename, FirmaTipo.SignedSuffix(_requestedTipo));
     }
 }

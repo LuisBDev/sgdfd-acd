@@ -14,8 +14,6 @@ namespace ACD.WebSocket.Messages;
 [JsonSerializable(typeof(SignedFileMessage))]
 [JsonSerializable(typeof(FirmaTimeoutMessage))]
 [JsonSerializable(typeof(ErrorMessage))]
-[JsonSerializable(typeof(CleanupConfirmedMessage))]
-[JsonSerializable(typeof(CleanupDoneMessage))]
 public partial class AcdJsonContext : JsonSerializerContext
 {
 }

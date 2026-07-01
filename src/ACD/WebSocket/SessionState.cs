@@ -8,6 +8,5 @@ public enum SessionState
     ReceivingFile,
     WatchingFirma,
     SendingFile,
-    WaitingCleanupConfirm,
     Closed
 }

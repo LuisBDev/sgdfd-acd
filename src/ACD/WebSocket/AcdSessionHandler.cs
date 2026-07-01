@@ -109,12 +109,6 @@ public sealed class AcdSessionHandler
         }
         finally
         {
-            if (_state != SessionState.Idle && _firmaHandler.CurrentFilename is not null)
-            {
-                _logger.LogInformation("[{SessionId}] Sesión interrumpida en estado {State}, limpiando archivos", _sessionId, _state);
-                _firmaHandler.Cleanup();
-            }
-
             _state = SessionState.Closed;
             _logger.LogInformation("[{SessionId}] Sesión finalizada", _sessionId);
         }
@@ -170,15 +164,6 @@ public sealed class AcdSessionHandler
                 _state = await _firmaHandler.SendSignedFileAsync(webSocket, reqMsg.Filename, ct);
                 return;
 
-            // Estado WAITING_CLEANUP_CONFIRM: CLEANUP_CONFIRMED es válido.
-            case (SessionState.WaitingCleanupConfirm, MessageType.CleanupConfirmed):
-                _logger.LogInformation("[{SessionId}] CLEANUP_CONFIRMED recibido, eliminando archivos", _sessionId);
-                _firmaHandler.Cleanup();
-                await WebSocketTransport.SendJsonAsync(webSocket, new CleanupDoneMessage(), AcdJsonContext.Default.CleanupDoneMessage, ct);
-                await WebSocketTransport.CloseWebSocketAsync(webSocket, WebSocketCloseStatus.NormalClosure, "Cleanup complete", ct);
-                _state = SessionState.Idle;
-                return;
-
             default:
                 _logger.LogWarning(
                     "[{SessionId}] Tipo de mensaje inesperado {Type} en estado {State}",
@@ -192,9 +177,7 @@ public sealed class AcdSessionHandler
     private static bool IsKnownMessageType(string type)
     {
         return type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
-            or MessageType.CleanupConfirmed
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
-            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error
-            or MessageType.CleanupDone;
+            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
     }
 }

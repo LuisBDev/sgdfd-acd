@@ -80,16 +80,6 @@ public sealed class FileDepositService : IFileDepositService
         }
     }
 
-    public void Cleanup(string originalFilename, string signedSuffix = "[F]")
-    {
-        var baseName = Path.GetFileNameWithoutExtension(originalFilename);
-        var originalPath = Path.Combine(_options.WatchDirectory, originalFilename);
-        var signedPath = Path.Combine(_options.WatchDirectory, $"{baseName}{signedSuffix}.pdf");
-
-        TryDelete(originalPath);
-        TryDelete(signedPath);
-    }
-
     private void EnsureWatchDirectory()
     {
         try
@@ -111,22 +101,6 @@ public sealed class FileDepositService : IFileDepositService
                 _options.WatchDirectory);
             _trayNotifier.SetState(TrayState.Error);
             _dirUnavailable = true;
-        }
-    }
-
-    private void TryDelete(string path)
-    {
-        try
-        {
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-                _logger.LogInformation("Archivo eliminado: {Path}", path);
-            }
-        }
-        catch (IOException ex)
-        {
-            _logger.LogWarning(ex, "No se pudo eliminar {Path}", path);
         }
     }
 }
