@@ -43,14 +43,12 @@ public sealed class AcdSessionHandler
 
         try
         {
-            // Enviar CONNECTED al cliente inmediatamente después del upgrade.
             var connected = new ConnectedMessage(
                 AgentVersion,
                 "READY",
                 _watchDirectory);
             await WebSocketTransport.SendJsonAsync(webSocket, connected, AcdJsonContext.Default.ConnectedMessage, ct);
 
-            // Loop principal de la state machine.
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
                 var (kind, payload) = await WebSocketTransport.ReceiveFrameAsync(webSocket, ct);
@@ -74,7 +72,6 @@ public sealed class AcdSessionHandler
                     continue;
                 }
 
-                // Text frame — deserializar y despachar.
                 if (payload is null) continue;
 
                 var baseMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.BaseMessage);
@@ -148,11 +145,11 @@ public sealed class AcdSessionHandler
                     return;
                 }
 
-                _firmaHandler.SetCurrentFilename(pdfMsg.Filename, pdfMsg.Tipo);
+                _firmaHandler.SetDocumentMetadata(pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Tipo);
                 _state = SessionState.ReceivingFile;
                 _logger.LogInformation(
-                    "[{SessionId}] Metadatos PDF_DOWNLOAD recibidos: {Filename} ({Size} bytes, tipo {Tipo}), estado -> ReceivingFile",
-                    _sessionId, pdfMsg.Filename, pdfMsg.Size, pdfMsg.Tipo);
+                    "[{SessionId}] Metadatos PDF_DOWNLOAD recibidos: {Tipo} {Numero} ({Size} bytes, tipoFirma {TipoFirma}) -> {Filename}, estado -> ReceivingFile",
+                    _sessionId, pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Size, pdfMsg.Tipo, _firmaHandler.CurrentFilename);
                 break;
 
             // Estado WATCHING: REQUEST_SIGNED_FILE es válido.

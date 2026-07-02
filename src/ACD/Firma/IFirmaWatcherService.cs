@@ -14,5 +14,10 @@ public record FirmaEvent(FirmaEventType Type, string FilePath, string? ErrorMess
 public interface IFirmaWatcherService : IAsyncDisposable
 {
     ChannelReader<FirmaEvent> Events { get; }
-    void StartWatching(string originalFilename, string signedSuffix = "[F]");
+
+    void StartWatching(string originalFilename, string? tipo);
+
+    void ArchiveSignedResiduals(string expectedSignedFilename);
+
+    void CleanupStaleOriginals(string activeOriginalFilename);
 }

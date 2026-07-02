@@ -39,9 +39,7 @@ var uriArg = args.SkipWhile(a => a != "--uri-invoke").Skip(1).FirstOrDefault();
 if (uriArg is not null && uriArg.StartsWith("acd-dev", StringComparison.OrdinalIgnoreCase))
     Environment.SetEnvironmentVariable("ASPNETCORE_ENVIRONMENT", "Development");
 
-// Variante incrustada en el build (AssemblyMetadata "AcdVariant": Dev | Prod).
-// Es el SOF para un build INSTALADO, que no tiene ASPNETCORE_ENVIRONMENT.
-// Solo aplica si el environment no fue fijado antes (por URI o por env var en dotnet run).
+// Fallback para builds instalados sin ASPNETCORE_ENVIRONMENT.
 var bakedVariant = Assembly.GetEntryAssembly()?
                        .GetCustomAttributes<AssemblyMetadataAttribute>()
                        .FirstOrDefault(a => a.Key == "AcdVariant")?.Value
@@ -53,7 +51,6 @@ if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") is null
         "ASPNETCORE_ENVIRONMENT",
         bakedVariant.Equals("Dev", StringComparison.OrdinalIgnoreCase) ? "Development" : "Production");
 
-// Determinar el environment y los identificadores derivados.
 var env = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")
           ?? Environment.GetEnvironmentVariable("DOTNET_ENVIRONMENT")
           ?? "Production";
@@ -127,7 +124,6 @@ var app = builder.Build();
 app.UseWebSockets();
 app.UseMiddleware<AcdWebSocketMiddleware>();
 
-// Escribir el archivo lock del puerto y registrar el URI scheme (idempotente en cada ejecución).
 var acdOptions = app.Services.GetRequiredService<IOptions<AcdOptions>>().Value;
 PortRegistry.Write(packId, acdOptions.Port);
 
@@ -135,7 +131,6 @@ var exePathForScheme = Environment.ProcessPath
                        ?? Assembly.GetExecutingAssembly().Location;
 UriSchemeHelper.EnsureRegistered(uriScheme, exePathForScheme);
 
-// Registrar limpieza al apagar.
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
 lifetime.ApplicationStopping.Register(() =>
 {

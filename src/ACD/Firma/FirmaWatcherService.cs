@@ -1,18 +1,14 @@
 using System.Threading.Channels;
 using ACD.Configuration;
+using ACD.Firma.Signing;
 using Microsoft.Extensions.Options;
 
 namespace ACD.Firma;
 
-/// <summary>
-///     Observa el WatchDirectory en busca de un PDF firmado (sufijo [F].pdf).
-///     FirmaONPE crea el archivo vacío y bloqueado, y lo completa recién cuando el
-///     usuario ingresa su clave; por eso se espera a que quede completo y desbloqueado
-///     hasta el timeout global, no con reintentos cortos.
-/// </summary>
 public sealed class FirmaWatcherService : IFirmaWatcherService
 {
     private const int PollIntervalMs = 500;
+    private const string ArchiveDirectoryName = "firmados";
 
     private readonly Channel<FirmaEvent> _channel = Channel.CreateUnbounded<FirmaEvent>(
         new UnboundedChannelOptions { SingleReader = true });
@@ -35,9 +31,10 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
     public ChannelReader<FirmaEvent> Events => _channel.Reader;
 
-    public void StartWatching(string originalFilename, string signedSuffix = "[F]")
+    public void StartWatching(string originalFilename, string? tipo)
     {
-        _expectedFilename = Path.GetFileNameWithoutExtension(originalFilename) + signedSuffix + ".pdf";
+        var signedSuffix = FirmaTipo.SignedSuffix(tipo);
+        _expectedFilename = FirmaTipo.SignedFileName(originalFilename, tipo);
         _waitStarted = 0;
         _logger.LogInformation("FirmaWatcher iniciado. Esperando archivo: {ExpectedFile}", _expectedFilename);
 
@@ -76,6 +73,109 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
         _channel.Writer.TryComplete();
         await ValueTask.CompletedTask.ConfigureAwait(false);
+    }
+
+    // Barre PDF firmados residuales de la raíz y los archiva en firmados\{yyyy}\{MM}.
+    // Excluye el firmado en vuelo para no archivarlo antes de enviarlo.
+    public void ArchiveSignedResiduals(string expectedSignedFilename)
+    {
+        IEnumerable<string> pdfs;
+        try
+        {
+            pdfs = Directory.EnumerateFiles(_options.WatchDirectory, "*.pdf", SearchOption.TopDirectoryOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "No se pudo enumerar TFIRMA para archivar firmados residuales");
+            return;
+        }
+
+        foreach (var stalePath in pdfs)
+        {
+            var staleFilename = Path.GetFileName(stalePath);
+
+            // No archivar el firmado que estamos esperando en este flujo.
+            if (string.Equals(staleFilename, expectedSignedFilename, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var nameNoExt = Path.GetFileNameWithoutExtension(staleFilename);
+            if (!HasSignedSuffix(nameNoExt)) continue;
+
+            try
+            {
+                // La última modificación del PDF es la fecha de firma; gobierna la
+                // carpeta {yyyy}\{MM}. El nombre  es único por su timestamp de descarga.
+                var signedAt = File.GetLastWriteTime(stalePath);
+                var archiveDirectory = Path.Combine(
+                    _options.WatchDirectory, ArchiveDirectoryName,
+                    signedAt.ToString("yyyy"), signedAt.ToString("MM"));
+                Directory.CreateDirectory(archiveDirectory);
+
+                var archivedPath = BuildUniqueArchivePath(archiveDirectory, $"{nameNoExt}_archived");
+
+                File.Move(stalePath, archivedPath);
+                _logger.LogInformation(
+                    "Firmado residual archivado: {StaleFile} -> {ArchivedPath}",
+                    staleFilename, archivedPath);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                // El archivado es best-effort: la firma continúa aunque el move falle.
+                _logger.LogWarning(ex, "No se pudo archivar el firmado residual, se continúa: {StalePath}", stalePath);
+            }
+        }
+    }
+
+    // Elimina PDF originales residuales (no firmados) de la raíz.
+    // Los firmados se gestionan en ArchiveSignedResiduals. Excluye el original in-flight.
+    public void CleanupStaleOriginals(string activeOriginalFilename)
+    {
+        IEnumerable<string> pdfs;
+        try
+        {
+            pdfs = Directory.EnumerateFiles(_options.WatchDirectory, "*.pdf", SearchOption.TopDirectoryOnly);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(ex, "No se pudo enumerar TFIRMA para limpiar originales residuales");
+            return;
+        }
+
+        foreach (var path in pdfs)
+        {
+            var filename = Path.GetFileName(path);
+
+            // No tocar el original que FirmaONPE está firmando ahora.
+            if (string.Equals(filename, activeOriginalFilename, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Solo originales: los firmados los gestiona ArchiveSignedResiduals.
+            if (HasSignedSuffix(Path.GetFileNameWithoutExtension(filename))) continue;
+
+            try
+            {
+                File.Delete(path);
+                _logger.LogInformation("Original residual eliminado: {File}", filename);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(ex, "No se pudo eliminar el original residual, se continúa: {Path}", path);
+            }
+        }
+    }
+
+    private static bool HasSignedSuffix(string nameWithoutExtension)
+    {
+        return FirmaTipo.SignedSuffixes.Any(suffix =>
+            nameWithoutExtension.EndsWith(suffix, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string BuildUniqueArchivePath(string directory, string baseFilename)
+    {
+        var path = Path.Combine(directory, baseFilename + ".pdf");
+        for (var i = 1; File.Exists(path); i++)
+            path = Path.Combine(directory, $"{baseFilename}_{i}.pdf");
+        return path;
     }
 
     private void OnFileEvent(object sender, FileSystemEventArgs e)

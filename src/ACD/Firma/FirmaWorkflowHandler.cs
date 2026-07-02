@@ -15,6 +15,10 @@ namespace ACD.Firma;
 /// </summary>
 public sealed class FirmaWorkflowHandler
 {
+    // Margen para que la instancia previa de FirmaONPE (si quedó abierta) libere
+    // el lock del firmado residual tras recibir los parámetros del nuevo lanzamiento.
+    private static readonly TimeSpan StaleArchiveDelay = TimeSpan.FromSeconds(3);
+
     private readonly IFileDepositService _depositService;
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly FirmaOptions _firmaOptions;
@@ -83,18 +87,16 @@ public sealed class FirmaWorkflowHandler
             return SessionState.Closed;
         }
 
-        // Confirmar recepción y comenzar a vigilar.
         await WebSocketTransport.SendJsonAsync(ws, new PdfReceivedMessage(CurrentFilename), AcdJsonContext.Default.PdfReceivedMessage, ct);
 
-        // El tipo de firma es crítico: sin él no se firma (validado en PDF_DOWNLOAD, guarda defensiva aquí).
         if (_requestedTipo is null)
         {
             await WebSocketTransport.SendErrorAndCloseAsync(ws, ErrorCatalog.MissingFirmaTipo, "Firma type is required", 1011, _logger, _sessionId, ct);
             return SessionState.Closed;
         }
 
-        // Armar el watcher antes de lanzar, para no perder el evento del [F].pdf.
-        _watcherService.StartWatching(CurrentFilename, FirmaTipo.SignedSuffix(_requestedTipo));
+        // Armar el watcher antes de lanzar, para no perder el evento del firmado.
+        _watcherService.StartWatching(CurrentFilename, _requestedTipo);
         _logger.LogInformation("[{SessionId}] Archivo escrito en {Path}, estado -> WatchingFirma", _sessionId, filePath);
 
         var firmaRequest = new FirmaRequest(
@@ -111,10 +113,33 @@ public sealed class FirmaWorkflowHandler
             return SessionState.Closed;
         }
 
+        // Archiva firmados residuales y limpia originales de intentos anteriores (best-effort).
+        var expectedSignedFilename = FirmaTipo.SignedFileName(CurrentFilename, _requestedTipo);
+        _ = RunDeferredHousekeepingAsync(expectedSignedFilename, CurrentFilename, ct);
+
         // Consumir eventos del watcher en segundo plano.
         _ = WatchFirmaAsync(ws, ct);
 
         return SessionState.WatchingFirma;
+    }
+
+    // Difiere para que la instancia previa de FirmaONPE libere locks de residuales.
+    // Orden: archiva firmados, luego limpia originales.
+    private async Task RunDeferredHousekeepingAsync(
+        string expectedSignedFilename,
+        string activeOriginalFilename,
+        CancellationToken ct)
+    {
+        try
+        {
+            await Task.Delay(StaleArchiveDelay, ct).ConfigureAwait(false);
+            _watcherService.ArchiveSignedResiduals(expectedSignedFilename);
+            _watcherService.CleanupStaleOriginals(activeOriginalFilename);
+        }
+        catch (OperationCanceledException)
+        {
+            // Sesión cerrada antes del housekeeping; los residuales se reintentan en la próxima firma.
+        }
     }
 
     public async Task WatchFirmaAsync(NativeWebSocket ws, CancellationToken ct)
@@ -142,7 +167,8 @@ public sealed class FirmaWorkflowHandler
 
                     case FirmaEventType.Error:
                         _logger.LogError("[{SessionId}] Error de FirmaWatcher: {Error}", _sessionId, firmaEvent.ErrorMessage);
-                        await WebSocketTransport.SendErrorAndCloseAsync(ws, ErrorCatalog.FileLocked, firmaEvent.ErrorMessage ?? "Signed file is locked", 1011, _logger, _sessionId, ct);
+                        await WebSocketTransport.SendErrorAndCloseAsync(ws, ErrorCatalog.FileLocked, firmaEvent.ErrorMessage ?? "Signed file is locked", 1011, _logger, _sessionId,
+                            ct);
                         return;
                 }
         }
@@ -221,9 +247,25 @@ public sealed class FirmaWorkflowHandler
         return SessionState.Idle;
     }
 
-    public void SetCurrentFilename(string filename, string? tipo = null)
+    // Deriva el nombre canónico del PDF (tipo + número + timestamp). El ACD es la única fuente de verdad.
+    public void SetDocumentMetadata(string tipoDocumento, string numeroDocumento, string? tipo)
     {
-        CurrentFilename = filename;
         _requestedTipo = tipo;
+        CurrentFilename = ResolveUniqueFilename(
+            FirmaDocumentName.Build(tipoDocumento, numeroDocumento, DateTime.Now));
+    }
+
+    // Guarda contra dos descargas en el mismo segundo.
+    private string ResolveUniqueFilename(string filename)
+    {
+        if (!File.Exists(Path.Combine(_watchDirectory, filename))) return filename;
+
+        var baseName = Path.GetFileNameWithoutExtension(filename);
+        var ext = Path.GetExtension(filename);
+        for (var i = 1;; i++)
+        {
+            var candidate = $"{baseName}_{i}{ext}";
+            if (!File.Exists(Path.Combine(_watchDirectory, candidate))) return candidate;
+        }
     }
 }

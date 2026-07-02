@@ -16,6 +16,10 @@ public static class FirmaTipo
 
     public static bool IsSupported(string? tipo) => tipo is not null && Supported.Contains(BaseCode(tipo));
 
+    // Todos los sufijos que FirmaONPE puede agregar, incluido el fallback [F].
+    public static readonly IReadOnlyList<string> SignedSuffixes =
+        new[] { "[F]", "[NF]", "[VF]", "[AF]", "[RF]" };
+
     // Sufijo que FirmaONPE agrega al PDF firmado según el tipo (ver ValidarDatos).
     public static string SignedSuffix(string? tipo) => BaseCode(tipo ?? "") switch
     {
@@ -25,6 +29,12 @@ public static class FirmaTipo
         Recepcion => "[RF]",
         _ => "[F]"
     };
+
+    // Nombre que FirmaONPE le dará al firmado del PDF original: base + sufijo + .pdf.
+    // Fuente única de la regla, compartida por el watcher (nombre esperado) y el
+    // flujo de archivado (exclusión del firmado en vuelo).
+    public static string SignedFileName(string originalFilename, string? tipo) =>
+        Path.GetFileNameWithoutExtension(originalFilename) + SignedSuffix(tipo) + ".pdf";
 
     private static string BaseCode(string tipo)
     {

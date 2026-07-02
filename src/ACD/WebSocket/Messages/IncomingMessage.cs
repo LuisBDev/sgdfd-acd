@@ -14,8 +14,10 @@ public sealed record AuthMessage(
 /// <summary>PDF_DOWNLOAD — anuncia la recepción del PDF. El siguiente frame contiene los datos binarios.</summary>
 public sealed record PdfDownloadMessage(
     [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("filename")]
-    string Filename,
+    [property: JsonPropertyName("tipoDocumento")]
+    string TipoDocumento,
+    [property: JsonPropertyName("numeroDocumento")]
+    string NumeroDocumento,
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("tipoFirma")]
     string? Tipo = null);
