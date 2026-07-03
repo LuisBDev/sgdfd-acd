@@ -101,7 +101,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         {
             _currentState = state;
             if (_notifyIcon is not null) _notifyIcon.Icon = CreateIcon(state);
-            if (_statusItem is not null) _statusItem.Text = $"Status: {state}";
+            if (_statusItem is not null) _statusItem.Text = $"Estado: {Describe(state)}";
         }, null);
     }
 
@@ -112,11 +112,16 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         _syncContext.Post(_ =>
         {
             _pendingUpdateVersion = version;
-            if (_updateItem is not null) _updateItem.Text = $"Update ready: {version}";
+            if (_updateItem is not null && !_updateTrigger.Value.IsBusy)
+            {
+                _updateItem.Text = $"Instalar actualización v{version} y reiniciar";
+                _updateItem.Enabled = true;
+            }
+
             _notifyIcon?.ShowBalloonTip(
                 5000,
-                "ACD Update Ready",
-                $"Version {version} is ready to install.",
+                "Actualización de ACD",
+                $"La versión {version} está lista para instalar.",
                 ToolTipIcon.Info);
         }, null);
     }
@@ -130,8 +135,8 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
             _updateProgress = percent;
             if (_updateItem is not null)
                 _updateItem.Text = percent < 100
-                    ? $"Downloading update... {percent}%"
-                    : "Update download complete";
+                    ? $"Descargando actualización… {percent}%"
+                    : "Descarga completa";
         }, null);
     }
 
@@ -153,25 +158,25 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
         var menu = new ContextMenuStrip();
 
-        _statusItem = new ToolStripMenuItem("Status: Ready") { Enabled = false };
+        _statusItem = new ToolStripMenuItem("Estado: Listo") { Enabled = false };
         menu.Items.Add(_statusItem);
 
-        var versionItem = new ToolStripMenuItem($"Version: {version}") { Enabled = false };
+        var versionItem = new ToolStripMenuItem($"Versión: {version}") { Enabled = false };
         menu.Items.Add(versionItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
-        _updateItem = new ToolStripMenuItem("Check for updates");
-        _updateItem.Click += (_, _) => CheckForUpdatesClicked();
+        _updateItem = new ToolStripMenuItem("Buscar e instalar actualización");
+        _updateItem.Click += (_, _) => UpdateItemClicked();
         menu.Items.Add(_updateItem);
 
         menu.Items.Add(new ToolStripSeparator());
 
-        var restartItem = new ToolStripMenuItem("Restart");
+        var restartItem = new ToolStripMenuItem("Reiniciar");
         restartItem.Click += (_, _) => RestartClicked();
         menu.Items.Add(restartItem);
 
-        var closeItem = new ToolStripMenuItem("Close");
+        var closeItem = new ToolStripMenuItem("Cerrar");
         closeItem.Click += (_, _) => _lifetime.StopApplication();
         menu.Items.Add(closeItem);
 
@@ -182,18 +187,66 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         Application.Run(new ApplicationContext());
     }
 
-    private async void CheckForUpdatesClicked()
+    private async void UpdateItemClicked()
     {
-        _logger.LogInformation("El usuario solicitó verificación manual de actualizaciones");
+        if (_updateItem is null) return;
+
+        _logger.LogInformation("El usuario disparó la actualización a demanda");
+        _updateItem.Enabled = false;
+        _updateItem.Text = "Actualizando…";
+
+        UpdateOutcome outcome;
         try
         {
-            await _updateTrigger.Value.CheckNowAsync();
+            outcome = await _updateTrigger.Value.UpdateNowAsync();
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error en la verificación manual de actualizaciones");
+            _logger.LogError(ex, "Error en la actualización a demanda");
+            outcome = UpdateOutcome.Failed;
         }
+
+        switch (outcome)
+        {
+            case UpdateOutcome.Applied:
+                // El proceso se está reiniciando; no restaurar el item.
+                return;
+            case UpdateOutcome.NoUpdatesAvailable:
+                ShowBalloon("ACD", "Ya tiene la última versión instalada.", ToolTipIcon.Info);
+                break;
+            case UpdateOutcome.SessionActive:
+                ShowBalloon("ACD", "Hay una firma en curso. Espere a que termine para actualizar.", ToolTipIcon.Warning);
+                break;
+            case UpdateOutcome.Failed:
+                ShowBalloon("ACD", "No se pudo actualizar. Intente nuevamente más tarde.", ToolTipIcon.Error);
+                break;
+        }
+
+        ResetUpdateItem();
     }
+
+    private void ResetUpdateItem()
+    {
+        if (_updateItem is null) return;
+
+        _updateItem.Enabled = true;
+        _updateItem.Text = _pendingUpdateVersion is null
+            ? "Buscar e instalar actualización"
+            : $"Instalar actualización v{_pendingUpdateVersion} y reiniciar";
+    }
+
+    private void ShowBalloon(string title, string text, ToolTipIcon icon)
+    {
+        _notifyIcon?.ShowBalloonTip(4000, title, text, icon);
+    }
+
+    private static string Describe(TrayState state) => state switch
+    {
+        TrayState.Ready => "Listo",
+        TrayState.Connected => "Conectado",
+        TrayState.Error => "Error",
+        _ => state.ToString()
+    };
 
     private void RestartClicked()
     {

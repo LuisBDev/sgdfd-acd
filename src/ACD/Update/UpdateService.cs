@@ -1,52 +1,130 @@
+using ACD.Hosting;
 using ACD.Tray;
+using ACD.WebSocket;
 using Microsoft.Extensions.Options;
 using Velopack;
 using Velopack.Sources;
-// Evitar ambigüedad con Velopack.UpdateOptions
 using AppUpdateOptions = ACD.Configuration.UpdateOptions;
 using VelopackUpdateOptions = Velopack.UpdateOptions;
 
 namespace ACD.Update;
 
 /// <summary>
-///     Background service que periódicamente busca updates de Velopack.
-///     Descarga updates silenciosamente. No aplica sin acción explícita del usuario.
+///     Background service that periodically checks and downloads Velopack updates.
+///     Installation is on-demand: only applied when the user triggers it from the tray
+///     and there is no active signing session.
+///
+///     Startup behavior:
+///     - When launched manually by the user: runs an initial check immediately (after a
+///       short stabilization delay) and then every <c>CheckIntervalHours</c> hours.
+///     - When launched via URI scheme (e.g. acd://…): skips the startup check to avoid
+///       unnecessary network activity; the periodic timer still runs normally.
+///
+///     A balloon tip is shown every time a pending update is detected, regardless of
+///     whether the detection was triggered at startup or by the periodic timer.
 /// </summary>
 public sealed class UpdateService : BackgroundService, IUpdateTrigger
 {
     private readonly IHostApplicationLifetime _lifetime;
+    private readonly LaunchContext _launchContext;
     private readonly ILogger<UpdateService> _logger;
     private readonly AppUpdateOptions _options;
+    private readonly ISessionGate _sessionGate;
     private readonly ITrayStateNotifier _trayNotifier;
+
+    private readonly SemaphoreSlim _checkLock = new(1, 1);
 
     private UpdateInfo? _pendingUpdate;
     private UpdateManager? _updateManager;
 
     public UpdateService(
         IOptions<AppUpdateOptions> options,
+        ISessionGate sessionGate,
         ITrayStateNotifier trayNotifier,
         ILogger<UpdateService> logger,
-        IHostApplicationLifetime lifetime)
+        IHostApplicationLifetime lifetime,
+        LaunchContext launchContext)
     {
         _options = options.Value;
+        _sessionGate = sessionGate;
         _trayNotifier = trayNotifier;
         _logger = logger;
         _lifetime = lifetime;
+        _launchContext = launchContext;
     }
 
     public bool HasPendingUpdate => _pendingUpdate is not null;
+    public string? PendingVersion { get; private set; }
+    public bool IsBusy { get; private set; }
     public int LastProgress { get; private set; }
 
-    public async Task CheckNowAsync()
+    /// <summary>
+    ///     Flujo a demanda de un solo gesto: descarga (si hace falta), aplica y reinicia el ACD.
+    ///     Aborta sin efectos si hay una firma en curso.
+    /// </summary>
+    public async Task<UpdateOutcome> UpdateNowAsync()
     {
-        await CheckAndDownloadAsync().ConfigureAwait(false);
+        if (IsBusy) return UpdateOutcome.Failed;
+        if (_sessionGate.IsActive) return UpdateOutcome.SessionActive;
+
+        IsBusy = true;
+        try
+        {
+            if (!HasPendingUpdate)
+                await CheckAndDownloadAsync().ConfigureAwait(false);
+
+            if (!HasPendingUpdate)
+                return UpdateOutcome.NoUpdatesAvailable;
+
+            // Revalidar: una firma pudo iniciarse mientras se descargaba.
+            if (_sessionGate.IsActive)
+                return UpdateOutcome.SessionActive;
+
+            ApplyUpdate();
+            return UpdateOutcome.Applied;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en la actualización a demanda");
+            return UpdateOutcome.Failed;
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
-    /// <summary>
-    ///     Aplica el update pendiente reiniciando el proceso vía Velopack.
-    ///     Solo debe llamarse cuando no hay una sesión WebSocket activa.
-    /// </summary>
-    public void ApplyUpdate()
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        // Allow the host to stabilize before the first check.
+        await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken).ConfigureAwait(false);
+
+        // Skip the startup check when the process was activated via URI scheme.
+        // The user did not open ACD manually, so performing an update check at this
+        // point would be unexpected and wasteful. The periodic timer below still runs
+        // normally so the check will happen within the next CheckIntervalHours window.
+        if (_launchContext.IsUriSchemeInvocation)
+        {
+            _logger.LogInformation(
+                "UpdateService: process was started via URI scheme — skipping startup update check.");
+        }
+        else
+        {
+            await CheckAndDownloadAsync().ConfigureAwait(false);
+        }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            await Task.Delay(
+                TimeSpan.FromHours(_options.CheckIntervalHours),
+                stoppingToken).ConfigureAwait(false);
+
+            await CheckAndDownloadAsync().ConfigureAwait(false);
+        }
+    }
+
+    // Aplica el update pendiente reiniciando el proceso vía Velopack.
+    private void ApplyUpdate()
     {
         if (_pendingUpdate is null || _updateManager is null)
         {
@@ -63,21 +141,6 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
         _lifetime.StopApplication();
     }
 
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        // Esperar estabilización antes de la primera verificación.
-        await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken).ConfigureAwait(false);
-
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            await CheckAndDownloadAsync().ConfigureAwait(false);
-
-            await Task.Delay(
-                TimeSpan.FromHours(_options.CheckIntervalHours),
-                stoppingToken).ConfigureAwait(false);
-        }
-    }
-
     private async Task CheckAndDownloadAsync()
     {
         if (string.IsNullOrEmpty(_options.RepoUrl))
@@ -86,8 +149,12 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
             return;
         }
 
+        // Serializa el chequeo automático con el disparo a demanda para evitar descargas duplicadas.
+        await _checkLock.WaitAsync().ConfigureAwait(false);
         try
         {
+            if (HasPendingUpdate) return;
+
             _logger.LogInformation(
                 "Verificando actualizaciones en {RepoUrl} (canal={Channel}, prerelease={Pre})",
                 _options.RepoUrl, _options.Channel, _options.IncludePrerelease);
@@ -118,7 +185,6 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
                 "Actualización disponible: {Version}",
                 updateInfo.TargetFullRelease.Version);
 
-            // Descargar en background con reporte de progreso.
             await _updateManager.DownloadUpdatesAsync(updateInfo, percent =>
             {
                 LastProgress = percent;
@@ -128,7 +194,8 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
             }).ConfigureAwait(false);
 
             _pendingUpdate = updateInfo;
-            _trayNotifier.NotifyUpdateAvailable(updateInfo.TargetFullRelease.Version.ToString());
+            PendingVersion = updateInfo.TargetFullRelease.Version.ToString();
+            _trayNotifier.NotifyUpdateAvailable(PendingVersion);
 
             _logger.LogInformation(
                 "Actualización {Version} descargada y lista para aplicar",
@@ -137,6 +204,10 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
         catch (Exception ex)
         {
             _logger.LogInformation("La verificación de actualizaciones aún no está disponible: {Message}", ex.Message);
+        }
+        finally
+        {
+            _checkLock.Release();
         }
     }
 }

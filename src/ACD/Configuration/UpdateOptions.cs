@@ -2,7 +2,7 @@ namespace ACD.Configuration;
 
 public sealed class UpdateOptions
 {
-    public int CheckIntervalHours { get; init; } = 6;
+    public int CheckIntervalHours { get; init; } = 1;
     public string RepoUrl { get; init; } = "";
 
     /// <summary>

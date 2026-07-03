@@ -10,7 +10,10 @@ public sealed class ProcessRunner : IProcessRunner
         {
             FileName = fileName,
             Arguments = arguments,
-            UseShellExecute = false
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true
         });
     }
 }

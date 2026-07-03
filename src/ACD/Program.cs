@@ -112,6 +112,11 @@ builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TrayIconService>());
 
+// Capture how the process was launched so services can adapt their behavior.
+// A URI-scheme invocation passes --uri-invoke <uri> as command-line arguments.
+var isUriInvoke = args.Contains("--uri-invoke");
+builder.Services.AddSingleton(new LaunchContext { IsUriSchemeInvocation = isUriInvoke });
+
 builder.Services.AddSingleton<UpdateService>();
 builder.Services.AddSingleton<IUpdateTrigger>(sp => sp.GetRequiredService<UpdateService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
