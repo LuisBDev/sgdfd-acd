@@ -21,6 +21,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
     private readonly Lazy<IUpdateTrigger> _updateTrigger;
 
     private TrayState _currentState = TrayState.Ready;
+    private ContextMenuStrip? _contextMenu;
     private NotifyIcon? _notifyIcon;
     private string? _pendingUpdateVersion;
 
@@ -196,6 +197,17 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
         _notifyIcon.ContextMenuStrip = menu;
 
+        // Keep the menu open while an update is in progress so the user can
+        // see the status text change (Buscando… → Descargando… → etc.).
+        menu.Closing += (_, e) =>
+        {
+            if (e.CloseReason == ToolStripDropDownCloseReason.ItemClicked
+                && _updateItem is { Enabled: false })
+                e.Cancel = true;
+        };
+
+        _contextMenu = menu;
+
         _staReady.TrySetResult();
 
         Application.Run(new ApplicationContext());
@@ -207,7 +219,7 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
 
         _logger.LogInformation("El usuario disparó la actualización a demanda");
         _updateItem.Enabled = false;
-        _updateItem.Text = "Actualizando…";
+        _updateItem.Text = "Buscando actualizaciones…";
 
         UpdateOutcome outcome;
         try
