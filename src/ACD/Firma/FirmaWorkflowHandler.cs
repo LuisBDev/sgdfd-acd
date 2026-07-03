@@ -247,12 +247,16 @@ public sealed class FirmaWorkflowHandler
         return SessionState.Idle;
     }
 
-    // Deriva el nombre canónico del PDF (tipo + número + timestamp). El ACD es la única fuente de verdad.
-    public void SetDocumentMetadata(string tipoDocumento, string numeroDocumento, string? tipo)
+    // Deriva el nombre canónico del PDF. Si viene la numeración (firma principal que numera),
+    // arma la gramática de 8 partes que FirmaONPE parsea para estampar el número; si no, el
+    // nombre canónico (tipo + número + timestamp). El ACD es la única fuente de verdad.
+    public void SetDocumentMetadata(string tipoDocumento, string numeroDocumento, string? tipo, string? numeracion)
     {
         _requestedTipo = tipo;
-        CurrentFilename = ResolveUniqueFilename(
-            FirmaDocumentName.Build(tipoDocumento, numeroDocumento, DateTime.Now));
+        var filename = string.IsNullOrWhiteSpace(numeracion)
+            ? FirmaDocumentName.Build(tipoDocumento, numeroDocumento, DateTime.Now)
+            : FirmaDocumentName.BuildFromNumeracion(numeracion, DateTime.Now);
+        CurrentFilename = ResolveUniqueFilename(filename);
     }
 
     // Guarda contra dos descargas en el mismo segundo.

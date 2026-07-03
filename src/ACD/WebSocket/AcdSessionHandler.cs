@@ -145,7 +145,7 @@ public sealed class AcdSessionHandler
                     return;
                 }
 
-                _firmaHandler.SetDocumentMetadata(pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Tipo);
+                _firmaHandler.SetDocumentMetadata(pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Tipo, pdfMsg.Numeracion);
                 _state = SessionState.ReceivingFile;
                 _logger.LogInformation(
                     "[{SessionId}] Metadatos PDF_DOWNLOAD recibidos: {Tipo} {Numero} ({Size} bytes, tipoFirma {TipoFirma}) -> {Filename}, estado -> ReceivingFile",

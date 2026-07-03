@@ -28,6 +28,28 @@ public static class FirmaDocumentName
         return $"{baseName}_{stamp}.pdf";
     }
 
+    /// <summary>
+    ///     Arma la gramática de nombre que FirmaONPE parsea para estampar la numeración:
+    ///     "TEMPR{timestamp}${numeracion}.pdf". El timestamp en la parte 0 (que FirmaONPE
+    ///     ignora) mantiene la unicidad; las 7 partes de {numeracion} las provee el backend.
+    /// </summary>
+    public static string BuildFromNumeracion(string numeracion, DateTime timestamp)
+    {
+        var stamp = timestamp.ToString(TimestampFormat, CultureInfo.InvariantCulture);
+        return $"TEMPR{stamp}${StripInvalidPathChars(numeracion)}.pdf";
+    }
+
+    // Quita solo caracteres inválidos de path Windows; preserva '$', '!', espacios y tildes.
+    private static string StripInvalidPathChars(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sb = new StringBuilder(value.Length);
+        foreach (var ch in value)
+            if (Array.IndexOf(invalid, ch) < 0)
+                sb.Append(ch);
+        return sb.ToString();
+    }
+
     // Normaliza (NFD), reemplaza caracteres inválidos de path Windows por espacios, colapsa.
     private static string Sanitize(string? value)
     {
