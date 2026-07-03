@@ -140,6 +140,20 @@ public sealed class TrayIconService : IHostedService, ITrayStateNotifier, IDispo
         }, null);
     }
 
+    public void NotifyUpdateApplying(string version)
+    {
+        if (_syncContext is null) return;
+
+        _syncContext.Post(_ =>
+        {
+            _notifyIcon?.ShowBalloonTip(
+                6000,
+                "Actualizando ACD",
+                $"Se instalará la versión {version} y el ACD se reiniciará automáticamente.",
+                ToolTipIcon.Info);
+        }, null);
+    }
+
     private void RunSta()
     {
         WindowsFormsSynchronizationContext.AutoInstall = false;

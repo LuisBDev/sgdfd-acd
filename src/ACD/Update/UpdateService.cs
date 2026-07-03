@@ -96,21 +96,21 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Allow the host to stabilize before the first check.
-        await Task.Delay(TimeSpan.FromSeconds(60), stoppingToken).ConfigureAwait(false);
-
-        // Skip the startup check when the process was activated via URI scheme.
-        // The user did not open ACD manually, so performing an update check at this
-        // point would be unexpected and wasteful. The periodic timer below still runs
-        // normally so the check will happen within the next CheckIntervalHours window.
         if (_launchContext.IsUriSchemeInvocation)
         {
+            // Launched by the frontend via URI scheme: skip the startup check.
+            // The periodic timer below will still run every CheckIntervalHours.
             _logger.LogInformation(
                 "UpdateService: process was started via URI scheme — skipping startup update check.");
         }
         else
         {
-            await CheckAndDownloadAsync().ConfigureAwait(false);
+            // Short stabilization delay so the tray icon is fully settled and
+            // Windows won't suppress the balloon tip on a freshly created icon.
+            await Task.Delay(TimeSpan.FromSeconds(3), stoppingToken).ConfigureAwait(false);
+
+            // Launched manually by the user: check immediately.
+            await CheckStartupAndAutoApplyAsync(stoppingToken).ConfigureAwait(false);
         }
 
         while (!stoppingToken.IsCancellationRequested)
@@ -121,6 +121,47 @@ public sealed class UpdateService : BackgroundService, IUpdateTrigger
 
             await CheckAndDownloadAsync().ConfigureAwait(false);
         }
+    }
+
+    /// <summary>
+    ///     Startup-only flow: checks, downloads, and — if no signing session is active —
+    ///     shows an "applying now" balloon then auto-applies the update.
+    ///     If a session is active the update stays pending; the user can install it
+    ///     manually from the tray menu once the session ends.
+    /// </summary>
+    private async Task CheckStartupAndAutoApplyAsync(CancellationToken stoppingToken)
+    {
+        await CheckAndDownloadAsync().ConfigureAwait(false);
+
+        if (!HasPendingUpdate) return;
+
+        if (_sessionGate.IsActive)
+        {
+            _logger.LogInformation(
+                "Startup update check: update {Version} available but a signing session is active — " +
+                "skipping auto-apply. User can install from the tray menu.",
+                PendingVersion);
+            return;
+        }
+
+        // Let the user read the balloon before the process restarts.
+        _trayNotifier.NotifyUpdateApplying(PendingVersion!);
+        _logger.LogInformation(
+            "Startup update check: auto-applying update {Version} in 5 seconds.",
+            PendingVersion);
+
+        await Task.Delay(TimeSpan.FromSeconds(5), stoppingToken).ConfigureAwait(false);
+
+        // Re-check: a signing session may have started while we were waiting.
+        if (_sessionGate.IsActive)
+        {
+            _logger.LogInformation(
+                "Startup update check: signing session became active during the delay — " +
+                "skipping auto-apply.");
+            return;
+        }
+
+        ApplyUpdate();
     }
 
     // Aplica el update pendiente reiniciando el proceso vía Velopack.
