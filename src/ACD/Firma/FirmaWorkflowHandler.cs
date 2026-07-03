@@ -117,7 +117,6 @@ public sealed class FirmaWorkflowHandler
         var expectedSignedFilename = FirmaTipo.SignedFileName(CurrentFilename, _requestedTipo);
         _ = RunDeferredHousekeepingAsync(expectedSignedFilename, CurrentFilename, ct);
 
-        // Consumir eventos del watcher en segundo plano.
         _ = WatchFirmaAsync(ws, ct);
 
         return SessionState.WatchingFirma;

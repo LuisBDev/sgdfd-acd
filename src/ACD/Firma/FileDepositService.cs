@@ -5,13 +5,9 @@ using Microsoft.Extensions.Options;
 
 namespace ACD.Firma;
 
-/// <summary>
-///     Escribe los bytes del PDF recibido en el watch directory configurado (default C:\TFIRMA).
-///     Escritura en streaming — no bufferiza el archivo completo en memoria.
-/// </summary>
 public sealed class FileDepositService : IFileDepositService
 {
-    private const int WriteBufferSize = 64 * 1024; // 64 KB
+    private const int WriteBufferSize = 64 * 1024;
     private readonly ILogger<FileDepositService> _logger;
     private readonly AcdOptions _options;
     private readonly ITrayStateNotifier _trayNotifier;

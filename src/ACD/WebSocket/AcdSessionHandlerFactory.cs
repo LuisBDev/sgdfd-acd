@@ -6,10 +6,6 @@ using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
 namespace ACD.WebSocket;
 
-/// <summary>
-///     Fábrica singleton que compone AcdSessionHandler con sus dependencias por sesión.
-///     Resuelve servicios scoped (IFileDepositService, IFirmaWatcherService) desde el scope inyectado.
-/// </summary>
 public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
     private readonly IFirmaLauncher _firmaLauncher;

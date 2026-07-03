@@ -6,9 +6,6 @@ using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
 namespace ACD.WebSocket;
 
-/// <summary>
-///     Funciones auxiliares para E/S de frames WebSocket. Sin estado interno.
-/// </summary>
 public static class WebSocketTransport
 {
     private const int BufferSize = 64 * 1024;

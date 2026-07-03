@@ -8,10 +8,6 @@ using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
 namespace ACD.WebSocket;
 
-/// <summary>
-///     Maneja el ciclo de vida completo de una sesión WebSocket vía una state machine.
-///     Se instancia por sesión desde AcdWebSocketMiddleware a través de IAcdSessionHandlerFactory.
-/// </summary>
 public sealed class AcdSessionHandler
 {
     private static readonly string AgentVersion =
@@ -101,7 +97,7 @@ public sealed class AcdSessionHandler
             }
             catch
             {
-                /* Limpieza al finalizar */
+                // ignore
             }
         }
         finally
@@ -119,7 +115,6 @@ public sealed class AcdSessionHandler
     {
         switch (_state, messageType)
         {
-            // Estado CONNECTED: solo AUTH es válido.
             case (SessionState.Connected, MessageType.Auth):
                 var authMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.AuthMessage);
                 if (authMsg is null) break;
@@ -134,7 +129,6 @@ public sealed class AcdSessionHandler
                 await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.AuthRequired, "Authentication required before sending data", 1008, _logger, _sessionId, ct);
                 return;
 
-            // Estado AUTHENTICATED: solo PDF_DOWNLOAD es válido.
             case (SessionState.Authenticated, MessageType.PdfDownload):
                 var pdfMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.PdfDownloadMessage);
                 if (pdfMsg is null) break;
@@ -152,7 +146,6 @@ public sealed class AcdSessionHandler
                     _sessionId, pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Size, pdfMsg.Tipo, _firmaHandler.CurrentFilename);
                 break;
 
-            // Estado WATCHING: REQUEST_SIGNED_FILE es válido.
             case (SessionState.WatchingFirma, MessageType.RequestSignedFile):
                 var reqMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.RequestSignedFileMessage);
                 if (reqMsg is null) break;

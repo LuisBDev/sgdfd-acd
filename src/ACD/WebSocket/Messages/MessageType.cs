@@ -1,8 +1,5 @@
 namespace ACD.WebSocket.Messages;
 
-/// <summary>
-///     Constantes string para discriminación de tipos de mensaje WebSocket.
-/// </summary>
 public static class MessageType
 {
     // Incoming (MFD → ACD)

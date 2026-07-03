@@ -103,7 +103,6 @@ builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactor
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
-// Subsistema de firma (FirmaONPE).
 builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
 builder.Services.AddSingleton<IFirmaSignerResolver, RegistryFirmaSignerResolver>();
 builder.Services.AddSingleton<IFirmaCommandBuilder, FirmaOnpeCommandBuilder>();
