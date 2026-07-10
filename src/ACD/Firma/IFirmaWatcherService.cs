@@ -15,7 +15,7 @@ public interface IFirmaWatcherService : IAsyncDisposable
 {
     ChannelReader<FirmaEvent> Events { get; }
 
-    void StartWatching(string originalFilename, string? tipo);
+    void StartWatching(string originalFilename, string? tipo, bool numera);
 
     void ArchiveSignedResiduals(string expectedSignedFilename);
 

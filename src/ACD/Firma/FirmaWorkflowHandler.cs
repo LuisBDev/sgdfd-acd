@@ -28,6 +28,7 @@ public sealed class FirmaWorkflowHandler
     private readonly string _watchDirectory;
     private readonly IFirmaWatcherService _watcherService;
     private string? _firmaFilePath;
+    private bool _numera;
     private string? _requestedTipo;
 
     public FirmaWorkflowHandler(
@@ -96,7 +97,7 @@ public sealed class FirmaWorkflowHandler
         }
 
         // Armar el watcher antes de lanzar, para no perder el evento del firmado.
-        _watcherService.StartWatching(CurrentFilename, _requestedTipo);
+        _watcherService.StartWatching(CurrentFilename, _requestedTipo, _numera);
         _logger.LogInformation("[{SessionId}] Archivo escrito en {Path}, estado -> WatchingFirma", _sessionId, filePath);
 
         var firmaRequest = new FirmaRequest(
@@ -114,7 +115,7 @@ public sealed class FirmaWorkflowHandler
         }
 
         // Archiva firmados residuales y limpia originales de intentos anteriores (best-effort).
-        var expectedSignedFilename = FirmaTipo.SignedFileName(CurrentFilename, _requestedTipo);
+        var expectedSignedFilename = FirmaTipo.SignedFileName(CurrentFilename, _requestedTipo, _numera);
         _ = RunDeferredHousekeepingAsync(expectedSignedFilename, CurrentFilename, ct);
 
         _ = WatchFirmaAsync(ws, ct);
@@ -246,15 +247,14 @@ public sealed class FirmaWorkflowHandler
         return SessionState.Idle;
     }
 
-    // Deriva el nombre canónico del PDF. Si viene la numeración (firma principal que numera),
-    // arma la gramática de 8 partes que FirmaONPE parsea para estampar el número; si no, el
-    // nombre canónico (tipo + número + timestamp). El ACD es la única fuente de verdad.
+
     public void SetDocumentMetadata(string tipoDocumento, string numeroDocumento, string? tipo, string? numeracion)
     {
         _requestedTipo = tipo;
-        var filename = string.IsNullOrWhiteSpace(numeracion)
-            ? FirmaDocumentName.Build(tipoDocumento, numeroDocumento, DateTime.Now)
-            : FirmaDocumentName.BuildFromNumeracion(numeracion, DateTime.Now);
+        _numera = !string.IsNullOrWhiteSpace(numeracion);
+        var filename = _numera
+            ? FirmaDocumentName.BuildFromNumeracion(numeracion!, DateTime.Now)
+            : FirmaDocumentName.Build(tipoDocumento, numeroDocumento, DateTime.Now);
         CurrentFilename = ResolveUniqueFilename(filename);
     }
 

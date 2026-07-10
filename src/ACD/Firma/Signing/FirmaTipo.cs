@@ -14,27 +14,35 @@ public static class FirmaTipo
         NumerarFirmar, VistoBueno, Avanzada, Recepcion
     };
 
-    public static bool IsSupported(string? tipo) => tipo is not null && Supported.Contains(BaseCode(tipo));
-
     // Todos los sufijos que FirmaONPE puede agregar, incluido el fallback [F].
     public static readonly IReadOnlyList<string> SignedSuffixes =
         new[] { "[F]", "[NF]", "[VF]", "[AF]", "[RF]" };
 
-    // Sufijo que FirmaONPE agrega al PDF firmado según el tipo (ver ValidarDatos).
-    public static string SignedSuffix(string? tipo) => BaseCode(tipo ?? "") switch
+    public static bool IsSupported(string? tipo)
     {
-        NumerarFirmar => "[NF]",
-        VistoBueno => "[VF]",
-        Avanzada => "[AF]",
-        Recepcion => "[RF]",
-        _ => "[F]"
-    };
+        return tipo is not null && Supported.Contains(BaseCode(tipo));
+    }
+
+
+    public static string SignedSuffix(string? tipo, bool numera)
+    {
+        return BaseCode(tipo ?? "") switch
+        {
+            NumerarFirmar => numera ? "[NF]" : "[F]",
+            VistoBueno => "[VF]",
+            Avanzada => "[AF]",
+            Recepcion => "[RF]",
+            _ => "[F]"
+        };
+    }
 
     // Nombre que FirmaONPE le dará al firmado del PDF original: base + sufijo + .pdf.
     // Fuente única de la regla, compartida por el watcher (nombre esperado) y el
     // flujo de archivado (exclusión del firmado en vuelo).
-    public static string SignedFileName(string originalFilename, string? tipo) =>
-        Path.GetFileNameWithoutExtension(originalFilename) + SignedSuffix(tipo) + ".pdf";
+    public static string SignedFileName(string originalFilename, string? tipo, bool numera)
+    {
+        return Path.GetFileNameWithoutExtension(originalFilename) + SignedSuffix(tipo, numera) + ".pdf";
+    }
 
     private static string BaseCode(string tipo)
     {

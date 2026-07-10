@@ -31,10 +31,10 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
     public ChannelReader<FirmaEvent> Events => _channel.Reader;
 
-    public void StartWatching(string originalFilename, string? tipo)
+    public void StartWatching(string originalFilename, string? tipo, bool numera)
     {
-        var signedSuffix = FirmaTipo.SignedSuffix(tipo);
-        _expectedFilename = FirmaTipo.SignedFileName(originalFilename, tipo);
+        var signedSuffix = FirmaTipo.SignedSuffix(tipo, numera);
+        _expectedFilename = FirmaTipo.SignedFileName(originalFilename, tipo, numera);
         _waitStarted = 0;
         _logger.LogInformation("FirmaWatcher iniciado. Esperando archivo: {ExpectedFile}", _expectedFilename);
 
