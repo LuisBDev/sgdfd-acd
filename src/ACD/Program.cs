@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Reflection;
 using ACD.Configuration;
 using ACD.Firma;
@@ -12,11 +13,14 @@ using Velopack;
 // Alias para evitar ambigüedad con Velopack.UpdateOptions
 using AppUpdateOptions = ACD.Configuration.UpdateOptions;
 
+var isFirstRun = false;
+
 // Inicialización de Velopack — DEBE ser la primera instrucción.
 // Maneja eventos de ciclo de vida install/update/uninstall y puede salir del proceso.
 VelopackApp.Build()
     .OnFirstRun(_ =>
     {
+        isFirstRun = true;
         var exePath = Environment.ProcessPath ?? Assembly.GetExecutingAssembly().Location;
         UriSchemeHelper.EnsureRegistered("acd", exePath);
         UriSchemeHelper.EnsureRegistered("acd-dev", exePath);
@@ -140,6 +144,26 @@ lifetime.ApplicationStopping.Register(() =>
 {
     PortRegistry.Delete(packId);
     app.Logger.LogInformation("Port lock file deleted for {PackId}", packId);
+});
+
+lifetime.ApplicationStarted.Register(() =>
+{
+    if (isFirstRun && !string.IsNullOrWhiteSpace(acdOptions.OnboardingUrl))
+    {
+        try
+        {
+            app.Logger.LogInformation("Lanzando página web MFD tras instalación: {Url}", acdOptions.OnboardingUrl);
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = acdOptions.OnboardingUrl,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            app.Logger.LogError(ex, "Error al lanzar la página web MFD ({Url})", acdOptions.OnboardingUrl);
+        }
+    }
 });
 
 app.Logger.LogInformation(

@@ -6,5 +6,6 @@ public sealed class AcdOptions
     public string WatchDirectory { get; init; } = @"C:\TFIRMA";
     public int FirmaTimeoutSeconds { get; init; } = 300;
     public string[] AllowedOrigins { get; init; } = [];
+    public string OnboardingUrl { get; init; } = "https://tramiteonline.unmsm.edu.pe/sgdfd/mfd";
     public FirmaOptions Firma { get; init; } = new();
 }
