@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using ACD.Firma;
 using ACD.Firma.Signing;
+using ACD.PdfOpen;
 using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
@@ -10,11 +11,14 @@ namespace ACD.WebSocket;
 
 public sealed class AcdSessionHandler
 {
+    private const int ProtocolVersion = 2;
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
     private readonly FirmaWorkflowHandler _firmaHandler;
     private readonly ILogger _logger;
+    private readonly PdfOpenWorkflowHandler _pdfOpenHandler;
     private readonly string _sessionId;
     private readonly string _watchDirectory;
     private string? _authToken;
@@ -23,11 +27,13 @@ public sealed class AcdSessionHandler
 
     public AcdSessionHandler(
         FirmaWorkflowHandler firmaHandler,
+        PdfOpenWorkflowHandler pdfOpenHandler,
         ILogger logger,
         string sessionId,
         string watchDirectory)
     {
         _firmaHandler = firmaHandler;
+        _pdfOpenHandler = pdfOpenHandler;
         _logger = logger;
         _sessionId = sessionId;
         _watchDirectory = watchDirectory;
@@ -42,7 +48,10 @@ public sealed class AcdSessionHandler
             var connected = new ConnectedMessage(
                 AgentVersion,
                 "READY",
-                _watchDirectory);
+                _watchDirectory,
+                ProtocolVersion,
+                "windows",
+                Capabilities);
             await WebSocketTransport.SendJsonAsync(webSocket, connected, AcdJsonContext.Default.ConnectedMessage, ct);
 
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -57,6 +66,12 @@ public sealed class AcdSessionHandler
 
                 if (kind == FrameKind.Binary)
                 {
+                    if (_state == SessionState.ReceivingPdfToOpen && _pdfOpenHandler.HasPendingRequest)
+                    {
+                        _state = await _pdfOpenHandler.HandleBinaryFrameAsync(webSocket, payload!, ct);
+                        continue;
+                    }
+
                     if (_state != SessionState.ReceivingFile || _firmaHandler.CurrentFilename is null)
                     {
                         _logger.LogWarning("[{SessionId}] Se recibió un frame binario en estado inesperado {State}", _sessionId, _state);
@@ -118,10 +133,21 @@ public sealed class AcdSessionHandler
             case (SessionState.Connected, MessageType.Auth):
                 var authMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.AuthMessage);
                 if (authMsg is null) break;
+                if (string.IsNullOrWhiteSpace(authMsg.Token))
+                {
+                    await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.AuthRequired, "A non-empty authentication token is required", 1008, _logger, _sessionId, ct);
+                    return;
+                }
                 _authToken = authMsg.Token;
                 _state = SessionState.Authenticated;
                 _logger.LogInformation("[{SessionId}] AUTH recibido, estado -> Authenticated", _sessionId);
                 await WebSocketTransport.SendJsonAsync(webSocket, new AuthOkMessage(), AcdJsonContext.Default.AuthOkMessage, ct);
+                break;
+
+            case (SessionState.Authenticated, MessageType.OpenPdf):
+                var openPdfMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.OpenPdfMessage);
+                if (openPdfMsg is null) break;
+                _state = await _pdfOpenHandler.PrepareAsync(webSocket, openPdfMsg, ct);
                 break;
 
             case (SessionState.Connected, _):
@@ -166,8 +192,8 @@ public sealed class AcdSessionHandler
 
     private static bool IsKnownMessageType(string type)
     {
-        return type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
+        return type is MessageType.Auth or MessageType.PdfDownload or MessageType.OpenPdf or MessageType.RequestSignedFile
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
-            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
+            or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
     }
 }

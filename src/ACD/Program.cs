@@ -3,6 +3,7 @@ using ACD.Configuration;
 using ACD.Firma;
 using ACD.Firma.Signing;
 using ACD.Hosting;
+using ACD.PdfOpen;
 using ACD.Tray;
 using ACD.Update;
 using ACD.WebSocket;
@@ -107,6 +108,10 @@ builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
 builder.Services.AddSingleton<IFirmaSignerResolver, RegistryFirmaSignerResolver>();
 builder.Services.AddSingleton<IFirmaCommandBuilder, FirmaOnpeCommandBuilder>();
 builder.Services.AddSingleton<IFirmaLauncher, FirmaLauncher>();
+builder.Services.AddSingleton<IPdfLauncher, ShellPdfLauncher>();
+builder.Services.AddSingleton(sp => new PdfOpenStorage(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
+    sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());
