@@ -7,4 +7,5 @@ public sealed class AcdOptions
     public int FirmaTimeoutSeconds { get; init; } = 300;
     public string[] AllowedOrigins { get; init; } = [];
     public FirmaOptions Firma { get; init; } = new();
+    public PdfOpenOptions PdfOpen { get; init; } = new();
 }

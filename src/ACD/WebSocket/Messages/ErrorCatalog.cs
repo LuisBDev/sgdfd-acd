@@ -10,7 +10,14 @@ public static class ErrorCategory
 public static class ErrorCatalog
 {
     public const string AuthRequired = "AUTH_REQUIRED";
+    public const string SessionBusy = "SESSION_BUSY";
     public const string InvalidFilename = "INVALID_FILENAME";
+    public const string InvalidRequestId = "INVALID_REQUEST_ID";
+    public const string InvalidFileSize = "INVALID_FILE_SIZE";
+    public const string PdfInvalid = "PDF_INVALID";
+    public const string HashMismatch = "HASH_MISMATCH";
+    public const string PdfOpenFailed = "PDF_OPEN_FAILED";
+    public const string StorageLimitExceeded = "STORAGE_LIMIT_EXCEEDED";
     public const string MissingFirmaTipo = "MISSING_FIRMA_TIPO";
     public const string UnsupportedFirmaTipo = "UNSUPPORTED_FIRMA_TIPO";
     public const string WriteFailed = "WRITE_FAILED";
@@ -25,7 +32,14 @@ public static class ErrorCatalog
     private static readonly IReadOnlyDictionary<string, string> Categories = new Dictionary<string, string>
     {
         [AuthRequired] = ErrorCategory.System,
+        [SessionBusy] = ErrorCategory.Transient,
         [InvalidFilename] = ErrorCategory.System,
+        [InvalidRequestId] = ErrorCategory.System,
+        [InvalidFileSize] = ErrorCategory.System,
+        [PdfInvalid] = ErrorCategory.System,
+        [HashMismatch] = ErrorCategory.System,
+        [PdfOpenFailed] = ErrorCategory.UserActionable,
+        [StorageLimitExceeded] = ErrorCategory.Transient,
         [MissingFirmaTipo] = ErrorCategory.System,
         [UnsupportedFirmaTipo] = ErrorCategory.System,
         [WriteFailed] = ErrorCategory.Transient,

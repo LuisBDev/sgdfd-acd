@@ -8,7 +8,13 @@ public sealed record ConnectedMessage(
     string Version,
     [property: JsonPropertyName("status")] string Status,
     [property: JsonPropertyName("watchDir")]
-    string WatchDir)
+    string WatchDir,
+    [property: JsonPropertyName("protocolVersion")]
+    int ProtocolVersion,
+    [property: JsonPropertyName("platform")]
+    string Platform,
+    [property: JsonPropertyName("capabilities")]
+    string[] Capabilities)
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.Connected;
 }
@@ -59,4 +65,11 @@ public sealed record ErrorMessage(
     string Category)
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.Error;
+}
+
+public sealed record PdfOpenedMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfOpened;
 }

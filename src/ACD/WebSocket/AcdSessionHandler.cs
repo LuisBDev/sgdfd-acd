@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Text.Json;
 using ACD.Firma;
 using ACD.Firma.Signing;
+using ACD.PdfOpen;
 using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
@@ -10,24 +11,33 @@ namespace ACD.WebSocket;
 
 public sealed class AcdSessionHandler
 {
+    private const int ProtocolVersion = 2;
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
     private readonly FirmaWorkflowHandler _firmaHandler;
     private readonly ILogger _logger;
+    private readonly PdfOpenWorkflowHandler _pdfOpenHandler;
+    private readonly ISessionGate _sessionGate;
     private readonly string _sessionId;
     private readonly string _watchDirectory;
     private string? _authToken;
+    private SessionOperation? _operation;
 
     private SessionState _state = SessionState.Connected;
 
     public AcdSessionHandler(
         FirmaWorkflowHandler firmaHandler,
+        PdfOpenWorkflowHandler pdfOpenHandler,
+        ISessionGate sessionGate,
         ILogger logger,
         string sessionId,
         string watchDirectory)
     {
         _firmaHandler = firmaHandler;
+        _pdfOpenHandler = pdfOpenHandler;
+        _sessionGate = sessionGate;
         _logger = logger;
         _sessionId = sessionId;
         _watchDirectory = watchDirectory;
@@ -42,7 +52,10 @@ public sealed class AcdSessionHandler
             var connected = new ConnectedMessage(
                 AgentVersion,
                 "READY",
-                _watchDirectory);
+                _watchDirectory,
+                ProtocolVersion,
+                "windows",
+                Capabilities);
             await WebSocketTransport.SendJsonAsync(webSocket, connected, AcdJsonContext.Default.ConnectedMessage, ct);
 
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
@@ -57,6 +70,12 @@ public sealed class AcdSessionHandler
 
                 if (kind == FrameKind.Binary)
                 {
+                    if (_state == SessionState.ReceivingPdfToOpen && _pdfOpenHandler.HasPendingRequest)
+                    {
+                        _state = await _pdfOpenHandler.HandleBinaryFrameAsync(webSocket, payload!, ct);
+                        continue;
+                    }
+
                     if (_state != SessionState.ReceivingFile || _firmaHandler.CurrentFilename is null)
                     {
                         _logger.LogWarning("[{SessionId}] Se recibió un frame binario en estado inesperado {State}", _sessionId, _state);
@@ -102,6 +121,13 @@ public sealed class AcdSessionHandler
         }
         finally
         {
+            if (_operation is { } operation)
+            {
+                _sessionGate.Release(operation);
+                _operation = null;
+                _logger.LogInformation("[{SessionId}] Operación {Operation} liberada", _sessionId, operation);
+            }
+
             _state = SessionState.Closed;
             _logger.LogInformation("[{SessionId}] Sesión finalizada", _sessionId);
         }
@@ -118,10 +144,22 @@ public sealed class AcdSessionHandler
             case (SessionState.Connected, MessageType.Auth):
                 var authMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.AuthMessage);
                 if (authMsg is null) break;
+                if (string.IsNullOrWhiteSpace(authMsg.Token))
+                {
+                    await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.AuthRequired, "A non-empty authentication token is required", 1008, _logger, _sessionId, ct);
+                    return;
+                }
                 _authToken = authMsg.Token;
                 _state = SessionState.Authenticated;
                 _logger.LogInformation("[{SessionId}] AUTH recibido, estado -> Authenticated", _sessionId);
                 await WebSocketTransport.SendJsonAsync(webSocket, new AuthOkMessage(), AcdJsonContext.Default.AuthOkMessage, ct);
+                break;
+
+            case (SessionState.Authenticated, MessageType.OpenPdf):
+                var openPdfMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.OpenPdfMessage);
+                if (openPdfMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.PdfOpen, ct)) return;
+                _state = await _pdfOpenHandler.PrepareAsync(webSocket, openPdfMsg, ct);
                 break;
 
             case (SessionState.Connected, _):
@@ -138,6 +176,7 @@ public sealed class AcdSessionHandler
                     await WebSocketTransport.SendErrorAndCloseAsync(webSocket, code, $"Invalid firma type: {pdfMsg.Tipo ?? "(none)"}", 1011, _logger, _sessionId, ct);
                     return;
                 }
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Signing, ct)) return;
 
                 _firmaHandler.SetDocumentMetadata(pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Tipo, pdfMsg.Numeracion);
                 _state = SessionState.ReceivingFile;
@@ -164,10 +203,54 @@ public sealed class AcdSessionHandler
         }
     }
 
+    private async Task<bool> TryBeginOperationAsync(
+        NativeWebSocket webSocket,
+        SessionOperation operation,
+        CancellationToken ct)
+    {
+        if (_operation == operation) return true;
+
+        if (_operation is not null)
+        {
+            await WebSocketTransport.SendErrorAndCloseAsync(
+                webSocket,
+                ErrorCatalog.UnexpectedMessage,
+                "A WebSocket session cannot change its operation type",
+                1008,
+                _logger,
+                _sessionId,
+                ct);
+            return false;
+        }
+
+        if (!await _sessionGate.TryAcquireAsync(operation, ct))
+        {
+            _logger.LogWarning(
+                "[{SessionId}] Operación {Operation} rechazada porque ya existe otra del mismo tipo",
+                _sessionId,
+                operation);
+            await WebSocketTransport.SendErrorAndCloseAsync(
+                webSocket,
+                ErrorCatalog.SessionBusy,
+                operation == SessionOperation.Signing
+                    ? "Another signing operation is already active"
+                    : "Another PDF opening operation is already active",
+                4002,
+                _logger,
+                _sessionId,
+                ct);
+            return false;
+        }
+
+        _operation = operation;
+        _logger.LogInformation("[{SessionId}] Operación {Operation} adquirida", _sessionId, operation);
+        return true;
+    }
+
     private static bool IsKnownMessageType(string type)
     {
-        return type is MessageType.Auth or MessageType.PdfDownload or MessageType.RequestSignedFile
+        return type is MessageType.Auth or MessageType.PdfDownload or MessageType.OpenPdf or MessageType.RequestSignedFile
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
-            or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
+            or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
     }
 }
