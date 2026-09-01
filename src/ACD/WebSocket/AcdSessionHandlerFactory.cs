@@ -14,18 +14,21 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
     private readonly AcdOptions _options;
     private readonly IPdfLauncher _pdfLauncher;
     private readonly PdfOpenStorage _pdfOpenStorage;
+    private readonly ISessionGate _sessionGate;
 
     public AcdSessionHandlerFactory(
         IOptions<AcdOptions> options,
         IFirmaLauncher firmaLauncher,
         IPdfLauncher pdfLauncher,
         PdfOpenStorage pdfOpenStorage,
+        ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
         _options = options.Value;
         _firmaLauncher = firmaLauncher;
         _pdfLauncher = pdfLauncher;
         _pdfOpenStorage = pdfOpenStorage;
+        _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
 
@@ -52,6 +55,6 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, logger, sessionId, _options.WatchDirectory);
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

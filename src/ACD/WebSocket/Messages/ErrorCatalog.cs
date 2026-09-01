@@ -10,6 +10,7 @@ public static class ErrorCategory
 public static class ErrorCatalog
 {
     public const string AuthRequired = "AUTH_REQUIRED";
+    public const string SessionBusy = "SESSION_BUSY";
     public const string InvalidFilename = "INVALID_FILENAME";
     public const string InvalidRequestId = "INVALID_REQUEST_ID";
     public const string InvalidFileSize = "INVALID_FILE_SIZE";
@@ -31,6 +32,7 @@ public static class ErrorCatalog
     private static readonly IReadOnlyDictionary<string, string> Categories = new Dictionary<string, string>
     {
         [AuthRequired] = ErrorCategory.System,
+        [SessionBusy] = ErrorCategory.Transient,
         [InvalidFilename] = ErrorCategory.System,
         [InvalidRequestId] = ErrorCategory.System,
         [InvalidFileSize] = ErrorCategory.System,

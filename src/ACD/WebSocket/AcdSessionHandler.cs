@@ -19,21 +19,25 @@ public sealed class AcdSessionHandler
     private readonly FirmaWorkflowHandler _firmaHandler;
     private readonly ILogger _logger;
     private readonly PdfOpenWorkflowHandler _pdfOpenHandler;
+    private readonly ISessionGate _sessionGate;
     private readonly string _sessionId;
     private readonly string _watchDirectory;
     private string? _authToken;
+    private SessionOperation? _operation;
 
     private SessionState _state = SessionState.Connected;
 
     public AcdSessionHandler(
         FirmaWorkflowHandler firmaHandler,
         PdfOpenWorkflowHandler pdfOpenHandler,
+        ISessionGate sessionGate,
         ILogger logger,
         string sessionId,
         string watchDirectory)
     {
         _firmaHandler = firmaHandler;
         _pdfOpenHandler = pdfOpenHandler;
+        _sessionGate = sessionGate;
         _logger = logger;
         _sessionId = sessionId;
         _watchDirectory = watchDirectory;
@@ -117,6 +121,13 @@ public sealed class AcdSessionHandler
         }
         finally
         {
+            if (_operation is { } operation)
+            {
+                _sessionGate.Release(operation);
+                _operation = null;
+                _logger.LogInformation("[{SessionId}] Operación {Operation} liberada", _sessionId, operation);
+            }
+
             _state = SessionState.Closed;
             _logger.LogInformation("[{SessionId}] Sesión finalizada", _sessionId);
         }
@@ -147,6 +158,7 @@ public sealed class AcdSessionHandler
             case (SessionState.Authenticated, MessageType.OpenPdf):
                 var openPdfMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.OpenPdfMessage);
                 if (openPdfMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.PdfOpen, ct)) return;
                 _state = await _pdfOpenHandler.PrepareAsync(webSocket, openPdfMsg, ct);
                 break;
 
@@ -164,6 +176,7 @@ public sealed class AcdSessionHandler
                     await WebSocketTransport.SendErrorAndCloseAsync(webSocket, code, $"Invalid firma type: {pdfMsg.Tipo ?? "(none)"}", 1011, _logger, _sessionId, ct);
                     return;
                 }
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Signing, ct)) return;
 
                 _firmaHandler.SetDocumentMetadata(pdfMsg.TipoDocumento, pdfMsg.NumeroDocumento, pdfMsg.Tipo, pdfMsg.Numeracion);
                 _state = SessionState.ReceivingFile;
@@ -188,6 +201,50 @@ public sealed class AcdSessionHandler
                 await WebSocketTransport.SendErrorAndCloseAsync(webSocket, errorCode, $"Message type {messageType} not valid in state {_state}", 1011, _logger, _sessionId, ct);
                 return;
         }
+    }
+
+    private async Task<bool> TryBeginOperationAsync(
+        NativeWebSocket webSocket,
+        SessionOperation operation,
+        CancellationToken ct)
+    {
+        if (_operation == operation) return true;
+
+        if (_operation is not null)
+        {
+            await WebSocketTransport.SendErrorAndCloseAsync(
+                webSocket,
+                ErrorCatalog.UnexpectedMessage,
+                "A WebSocket session cannot change its operation type",
+                1008,
+                _logger,
+                _sessionId,
+                ct);
+            return false;
+        }
+
+        if (!await _sessionGate.TryAcquireAsync(operation, ct))
+        {
+            _logger.LogWarning(
+                "[{SessionId}] Operación {Operation} rechazada porque ya existe otra del mismo tipo",
+                _sessionId,
+                operation);
+            await WebSocketTransport.SendErrorAndCloseAsync(
+                webSocket,
+                ErrorCatalog.SessionBusy,
+                operation == SessionOperation.Signing
+                    ? "Another signing operation is already active"
+                    : "Another PDF opening operation is already active",
+                4002,
+                _logger,
+                _sessionId,
+                ct);
+            return false;
+        }
+
+        _operation = operation;
+        _logger.LogInformation("[{SessionId}] Operación {Operation} adquirida", _sessionId, operation);
+        return true;
     }
 
     private static bool IsKnownMessageType(string type)
