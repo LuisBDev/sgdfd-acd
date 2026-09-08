@@ -1,6 +1,7 @@
 using ACD.Configuration;
 using ACD.Firma;
 using ACD.Firma.Signing;
+using ACD.PdfOpen;
 using Microsoft.Extensions.Options;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
 
@@ -11,14 +12,23 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly ILoggerFactory _loggerFactory;
     private readonly AcdOptions _options;
+    private readonly IPdfLauncher _pdfLauncher;
+    private readonly PdfOpenStorage _pdfOpenStorage;
+    private readonly ISessionGate _sessionGate;
 
     public AcdSessionHandlerFactory(
         IOptions<AcdOptions> options,
         IFirmaLauncher firmaLauncher,
+        IPdfLauncher pdfLauncher,
+        PdfOpenStorage pdfOpenStorage,
+        ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
         _options = options.Value;
         _firmaLauncher = firmaLauncher;
+        _pdfLauncher = pdfLauncher;
+        _pdfOpenStorage = pdfOpenStorage;
+        _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
 
@@ -38,6 +48,13 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, logger, sessionId, _options.WatchDirectory);
+        var pdfOpenHandler = new PdfOpenWorkflowHandler(
+            _options.PdfOpen,
+            _pdfOpenStorage,
+            _pdfLauncher,
+            logger,
+            sessionId);
+
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

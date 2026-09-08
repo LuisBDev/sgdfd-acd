@@ -2,13 +2,13 @@ using ACD.Configuration;
 using ACD.Firma;
 using Microsoft.Extensions.Options;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
-using WebSocketCloseStatus = System.Net.WebSockets.WebSocketCloseStatus;
 
 namespace ACD.WebSocket;
 
 /// <summary>
 ///     Middleware de ASP.NET Core que maneja WebSocket upgrades en /acd.
-///     Aplica validación de Origin, single-session gate, y delega a AcdSessionHandler.
+///     Aplica validación de Origin y delega a AcdSessionHandler. La exclusividad
+///     se controla por operación dentro de la sesión, después de autenticarla.
 /// </summary>
 public sealed class AcdWebSocketMiddleware
 {
@@ -72,42 +72,44 @@ public sealed class AcdWebSocketMiddleware
             return;
         }
 
-        // Intentar adquirir el bloqueo de sesión única.
-        var acquired = await _sessionGate.TryAcquireAsync(context.RequestAborted);
-
-        if (!acquired)
+        if (!await _sessionGate.TryAcquireConnectionAsync(context.RequestAborted))
         {
-            _logger.LogWarning("Upgrade WebSocket rechazado — sesión ya activa (4002)");
-            // Debe aceptar el upgrade antes de enviar el close frame.
+            _logger.LogWarning("Upgrade WebSocket rechazado — capacidad de dos conexiones alcanzada (4002)");
             var busyWs = await context.WebSockets.AcceptWebSocketAsync();
             await busyWs.CloseAsync(
-                (WebSocketCloseStatus)4002,
-                "Session already active",
+                (System.Net.WebSockets.WebSocketCloseStatus)4002,
+                "Connection capacity reached",
                 context.RequestAborted);
             return;
         }
 
-        // Crear un DI scope para esta sesión (scoped services: FileDepositService, FirmaWatcherService).
-        await using var scope = _sp.CreateAsyncScope();
-        var watcherService = scope.ServiceProvider.GetRequiredService<IFirmaWatcherService>();
-
-        var sessionId = Guid.NewGuid().ToString("N");
-        NativeWebSocket? webSocket = null;
-
         try
         {
-            webSocket = await context.WebSockets.AcceptWebSocketAsync();
-            _logger.LogInformation("Sesión WebSocket abierta: {SessionId}", sessionId);
+            // Crear un DI scope para esta sesión (scoped services: FileDepositService, FirmaWatcherService).
+            await using var scope = _sp.CreateAsyncScope();
+            var watcherService = scope.ServiceProvider.GetRequiredService<IFirmaWatcherService>();
 
-            var handler = _factory.Create(sessionId, webSocket, scope);
-            await handler.HandleAsync(webSocket, context.RequestAborted);
+            var sessionId = Guid.NewGuid().ToString("N");
+            NativeWebSocket? webSocket = null;
+
+            try
+            {
+                webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                _logger.LogInformation("Sesión WebSocket abierta: {SessionId}", sessionId);
+
+                var handler = _factory.Create(sessionId, webSocket, scope);
+                await handler.HandleAsync(webSocket, context.RequestAborted);
+            }
+            finally
+            {
+                await watcherService.DisposeAsync();
+
+                if (webSocket is not null) _logger.LogInformation("Sesión WebSocket cerrada: {SessionId}", sessionId);
+            }
         }
         finally
         {
-            _sessionGate.Release();
-            await watcherService.DisposeAsync();
-
-            if (webSocket is not null) _logger.LogInformation("Sesión WebSocket cerrada: {SessionId}", sessionId);
+            _sessionGate.ReleaseConnection();
         }
     }
 

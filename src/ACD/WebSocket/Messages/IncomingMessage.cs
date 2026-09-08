@@ -24,6 +24,17 @@ public sealed record PdfDownloadMessage(
     [property: JsonPropertyName("numeracion")]
     string? Numeracion = null);
 
+/// <summary>
+///     OPEN_PDF — anuncia un PDF que debe abrirse con la aplicación predeterminada de Windows.
+///     El siguiente frame contiene exactamente <see cref="Size"/> bytes.
+/// </summary>
+public sealed record OpenPdfMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string RequestId,
+    [property: JsonPropertyName("filename")] string Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256);
+
 public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("filename")]
