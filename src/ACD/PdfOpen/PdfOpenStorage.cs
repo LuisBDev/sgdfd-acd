@@ -1,3 +1,4 @@
+using System.Globalization;
 using ACD.Configuration;
 
 namespace ACD.PdfOpen;
@@ -32,7 +33,8 @@ public sealed class PdfOpenStorage
         var displayName = Path.GetFileNameWithoutExtension(request.SafeFilename);
         if (displayName.Length > 80) displayName = displayName[..80];
 
-        var filePath = Path.Combine(_rootDirectory, $"{request.RequestId:N}-{displayName}.pdf");
+        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmssfff", CultureInfo.InvariantCulture);
+        var filePath = Path.Combine(_rootDirectory, $"{displayName}-{timestamp}.pdf");
         await using var stream = new FileStream(
             filePath,
             FileMode.CreateNew,
