@@ -21,6 +21,7 @@ namespace ACD.WebSocket.Messages;
 [JsonSerializable(typeof(DocumentOpenedMessage))]
 [JsonSerializable(typeof(EditedPdfReadyMessage))]
 [JsonSerializable(typeof(EditedPdfMessage))]
+[JsonSerializable(typeof(EditedPdfUnavailableMessage))]
 [JsonSerializable(typeof(EditTimeoutMessage))]
 [JsonSerializable(typeof(ErrorMessage))]
 public partial class AcdJsonContext : JsonSerializerContext

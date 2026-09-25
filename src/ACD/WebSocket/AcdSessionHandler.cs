@@ -306,7 +306,8 @@ public sealed class AcdSessionHandler
             or MessageType.EditDocument or MessageType.RequestEditedPdf or MessageType.CancelEdit
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
             or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout
-            or MessageType.DocumentOpened or MessageType.EditedPdfReady or MessageType.EditedPdf or MessageType.EditTimeout
+            or MessageType.DocumentOpened or MessageType.EditedPdfReady or MessageType.EditedPdf or MessageType.EditedPdfUnavailable
+            or MessageType.EditTimeout
             or MessageType.Error;
     }
 }

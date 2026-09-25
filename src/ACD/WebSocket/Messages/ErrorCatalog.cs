@@ -29,6 +29,7 @@ public static class ErrorCatalog
     public const string EditHashMismatch = "EDIT_HASH_MISMATCH";
     public const string EditLaunchFailed = "EDIT_LAUNCH_FAILED";
     public const string EditPdfNotReady = "EDIT_PDF_NOT_READY";
+    public const string EditPdfReadFailed = "EDIT_PDF_READ_FAILED";
     public const string UnexpectedMessage = "UNEXPECTED_MESSAGE";
     public const string UnknownMessageType = "UNKNOWN_MESSAGE_TYPE";
     public const string InternalError = "INTERNAL_ERROR";
@@ -54,7 +55,6 @@ public static class ErrorCatalog
         [EditInvalidRequest] = ErrorCategory.System,
         [EditHashMismatch] = ErrorCategory.System,
         [EditLaunchFailed] = ErrorCategory.UserActionable,
-        [EditPdfNotReady] = ErrorCategory.UserActionable,
         [UnexpectedMessage] = ErrorCategory.System,
         [UnknownMessageType] = ErrorCategory.System,
         [InternalError] = ErrorCategory.System,

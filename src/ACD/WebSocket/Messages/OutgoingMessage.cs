@@ -103,6 +103,16 @@ public sealed record EditedPdfMessage(
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdf;
 }
 
+public sealed record EditedPdfUnavailableMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("code")] string Code,
+    [property: JsonPropertyName("message")]
+    string Message)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdfUnavailable;
+}
+
 public sealed record EditTimeoutMessage(
     [property: JsonPropertyName("requestId")]
     string RequestId)

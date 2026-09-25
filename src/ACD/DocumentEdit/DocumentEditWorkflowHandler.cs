@@ -158,7 +158,7 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
         var version = _watcher?.LatestVersion;
         if (version is null)
         {
-            await SendErrorAsync(ws, ErrorCatalog.EditPdfNotReady, "No edited PDF has been saved yet", ct);
+            await SendUnavailableAsync(ws, requestId, ErrorCatalog.EditPdfNotReady, "No edited PDF has been saved yet", ct);
             return SessionState.EditingDocument;
         }
 
@@ -175,7 +175,7 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 _logger.LogWarning(ex, "[{SessionId}] El PDF editado {File} no está disponible para lectura", _sessionId, version.FileName);
-                await SendErrorUnlockedAsync(ws, ErrorCatalog.ReadFailed, "The edited PDF is being written; try again", ct);
+                await SendUnavailableUnlockedAsync(ws, requestId, ErrorCatalog.EditPdfReadFailed, "The edited PDF is being written; try again", ct);
                 return SessionState.EditingDocument;
             }
 
@@ -184,7 +184,7 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
                 var length = stream.Length;
                 if (length == 0)
                 {
-                    await SendErrorUnlockedAsync(ws, ErrorCatalog.ReadFailed, "The edited PDF is being written; try again", ct);
+                    await SendUnavailableUnlockedAsync(ws, requestId, ErrorCatalog.EditPdfReadFailed, "The edited PDF is being written; try again", ct);
                     return SessionState.EditingDocument;
                 }
 
@@ -379,12 +379,12 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
         }
     }
 
-    private async Task SendErrorAsync(NativeWebSocket ws, string code, string message, CancellationToken ct)
+    private async Task SendUnavailableAsync(NativeWebSocket ws, string requestId, string code, string message, CancellationToken ct)
     {
         await _sendLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
-            await SendErrorUnlockedAsync(ws, code, message, ct);
+            await SendUnavailableUnlockedAsync(ws, requestId, code, message, ct);
         }
         finally
         {
@@ -392,13 +392,13 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
         }
     }
 
-    private async Task SendErrorUnlockedAsync(NativeWebSocket ws, string code, string message, CancellationToken ct)
+    private async Task SendUnavailableUnlockedAsync(NativeWebSocket ws, string requestId, string code, string message, CancellationToken ct)
     {
         if (_closed) return;
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new ErrorMessage(code, message, ErrorCatalog.CategoryOf(code)),
-            AcdJsonContext.Default.ErrorMessage,
+            new EditedPdfUnavailableMessage(requestId, code, message),
+            AcdJsonContext.Default.EditedPdfUnavailableMessage,
             ct);
     }
 

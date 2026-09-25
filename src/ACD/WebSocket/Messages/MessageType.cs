@@ -22,6 +22,7 @@ public static class MessageType
     public const string DocumentOpened = "DOCUMENT_OPENED";
     public const string EditedPdfReady = "EDITED_PDF_READY";
     public const string EditedPdf = "EDITED_PDF";
+    public const string EditedPdfUnavailable = "EDITED_PDF_UNAVAILABLE";
     public const string EditTimeout = "EDIT_TIMEOUT";
     public const string Error = "ERROR";
 }

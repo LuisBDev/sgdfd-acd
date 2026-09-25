@@ -16,7 +16,7 @@ The agent is launched on demand via a custom URI scheme (`acd://`) registered in
 
 ## WebSocket Protocol
 
-Every session starts with `CONNECTED` (sent by ACD) followed by `AUTH` → `AUTH_OK`. `CONNECTED.capabilities` announces the supported operations: `pdf.sign.firma-onpe`, `pdf.open` and `document.edit` (`protocolVersion` stays `2`). A session runs a single operation type; ACD allows one active operation per type (`SESSION_BUSY`, close `4002`, otherwise). Unless stated otherwise, every `ERROR` frame (`code`, `message`, `category`) is followed by the socket closing.
+Every session starts with `CONNECTED` (sent by ACD) followed by `AUTH` → `AUTH_OK`. `CONNECTED.capabilities` announces the supported operations: `pdf.sign.firma-onpe`, `pdf.open` and `document.edit` (`protocolVersion` stays `2`). A session runs a single operation type; ACD allows one active operation per type (`SESSION_BUSY`, close `4002`, otherwise). Every `ERROR` frame (`code`, `message`, `category`) is terminal: ACD closes the socket right after it. Recoverable conditions use their own message types.
 
 ### Document edit (`document.edit`)
 
@@ -29,28 +29,37 @@ Opens an editable document (default: `.docx`, configurable through `Acd:Document
 | ACD → Web | `EDITED_PDF_READY` (one per saved version) | `requestId`, `filename`, `size`, `version` |
 | Web → ACD | `REQUEST_EDITED_PDF` | `requestId` |
 | ACD → Web | `EDITED_PDF` + 1 binary message (latest version) | `requestId`, `filename`, `size` |
+| ACD → Web | `EDITED_PDF_UNAVAILABLE` (session stays open) | `requestId`, `code`, `message` |
 | Web → ACD | `CANCEL_EDIT` | `requestId` |
 | ACD → Web | `EDIT_TIMEOUT` | `requestId` |
 
 1. `EDIT_DOCUMENT` is validated before the binary frame is read: `size` above `MaxFileBytes` or a frame larger than the declared `size` is rejected with `INVALID_FILE_SIZE`.
 2. The document is stored in `%LOCALAPPDATA%\ACD\Temp\DocumentEdit\<requestId>\`, the PDF watcher is armed on that folder and only then the document is opened.
 3. Each valid PDF (`%PDF-` … `%%EOF`, stable on disk, new content) saved in that folder produces `EDITED_PDF_READY` with an increasing `version`.
-4. `REQUEST_EDITED_PDF` may be sent any number of times; ACD answers with the latest version. The binary message is split in 64 KB fragments and its length always equals `EDITED_PDF.size`.
+4. `REQUEST_EDITED_PDF` may be sent any number of times; ACD answers with the latest version. The binary message is split in 64 KB fragments and its length always equals `EDITED_PDF.size`. When no PDF can be delivered yet, ACD answers `EDITED_PDF_UNAVAILABLE` instead and the session stays open: `code` is `EDIT_PDF_NOT_READY` (no PDF saved yet) or `EDIT_PDF_READ_FAILED` (the PDF is being written; retry).
 5. `CANCEL_EDIT` stops the watcher and closes the socket with `1000`. Closing the socket from the web side has the same effect.
 6. After `TimeoutMinutes` (default 60) since `DOCUMENT_OPENED`, ACD sends `EDIT_TIMEOUT` and closes with `1000`.
 
 The editor may stay open after the session ends, so the folder is never deleted on close; it is removed by retention (`RetentionHours`, default 24) the next time a document is stored.
 
-| Code | Category | Fatal | When |
-|------|----------|-------|------|
-| `EDIT_INVALID_REQUEST` | `SYSTEM` | yes | Invalid `requestId`, `filename`, extension or `sha256` format; `requestId` not matching the active edit |
-| `INVALID_FILE_SIZE` | `SYSTEM` | yes | `size` out of range or binary payload size mismatch |
-| `EDIT_HASH_MISMATCH` | `SYSTEM` | yes | Binary payload does not match `sha256` |
-| `STORAGE_LIMIT_EXCEEDED` | `TRANSIENT` | yes | `MaxStorageBytes` reached |
-| `WRITE_FAILED` | `TRANSIENT` | yes | The document could not be stored |
-| `EDIT_LAUNCH_FAILED` | `USER_ACTIONABLE` | yes | Windows could not open the document |
-| `EDIT_PDF_NOT_READY` | `USER_ACTIONABLE` | no | `REQUEST_EDITED_PDF` before any PDF was saved |
-| `READ_FAILED` | `TRANSIENT` | no* | The PDF is being written; retry `REQUEST_EDITED_PDF`. *Fatal if it fails after `EDITED_PDF` was sent |
+`ERROR` codes (all terminal):
+
+| Code | Category | When |
+|------|----------|------|
+| `EDIT_INVALID_REQUEST` | `SYSTEM` | Invalid `requestId`, `filename`, extension or `sha256` format; `requestId` not matching the active edit |
+| `INVALID_FILE_SIZE` | `SYSTEM` | `size` out of range or binary payload size mismatch |
+| `EDIT_HASH_MISMATCH` | `SYSTEM` | Binary payload does not match `sha256` |
+| `STORAGE_LIMIT_EXCEEDED` | `TRANSIENT` | `MaxStorageBytes` reached |
+| `WRITE_FAILED` | `TRANSIENT` | The document could not be stored |
+| `EDIT_LAUNCH_FAILED` | `USER_ACTIONABLE` | Windows could not open the document |
+| `READ_FAILED` | `TRANSIENT` | Reading the PDF failed after `EDITED_PDF` was sent |
+
+`EDITED_PDF_UNAVAILABLE` codes (non-terminal):
+
+| Code | When |
+|------|------|
+| `EDIT_PDF_NOT_READY` | `REQUEST_EDITED_PDF` before any PDF was saved |
+| `EDIT_PDF_READ_FAILED` | The PDF is locked or being written; retry `REQUEST_EDITED_PDF` |
 
 ## Tech Stack
 
