@@ -8,4 +8,5 @@ public sealed class AcdOptions
     public string[] AllowedOrigins { get; init; } = [];
     public FirmaOptions Firma { get; init; } = new();
     public PdfOpenOptions PdfOpen { get; init; } = new();
+    public DocumentEditOptions DocumentEdit { get; init; } = new();
 }

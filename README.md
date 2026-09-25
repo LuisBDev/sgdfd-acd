@@ -78,7 +78,8 @@ A background service checks for updates every 6 hours (first check 60 seconds af
 ```
 src/ACD/
   Configuration/   — App and update options
-  Files/           — Shared file utilities (stable file probe)
+  DocumentEdit/    — Document edit workspace: request validation and per-request storage
+  Files/           — Shared file utilities (stable file probe, shell launcher)
   Firma/           — File deposit and FirmaONPE file watcher
   System/          — Tray icon, single-instance guard, URI scheme registration
   Update/          — Background update service

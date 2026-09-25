@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using ACD.Configuration;
+using ACD.Files;
 using ACD.WebSocket;
 using ACD.WebSocket.Messages;
 using NativeWebSocket = System.Net.WebSockets.WebSocket;
@@ -11,7 +12,7 @@ public sealed class PdfOpenWorkflowHandler
     private static readonly byte[] PdfHeader = "%PDF-"u8.ToArray();
     private readonly ILogger _logger;
     private readonly PdfOpenOptions _options;
-    private readonly IPdfLauncher _pdfLauncher;
+    private readonly IShellLauncher _shellLauncher;
     private readonly PdfOpenStorage _storage;
     private readonly string _sessionId;
     private PdfOpenRequest? _request;
@@ -19,13 +20,13 @@ public sealed class PdfOpenWorkflowHandler
     public PdfOpenWorkflowHandler(
         PdfOpenOptions options,
         PdfOpenStorage storage,
-        IPdfLauncher pdfLauncher,
+        IShellLauncher shellLauncher,
         ILogger logger,
         string sessionId)
     {
         _options = options;
         _storage = storage;
-        _pdfLauncher = pdfLauncher;
+        _shellLauncher = shellLauncher;
         _logger = logger;
         _sessionId = sessionId;
     }
@@ -105,7 +106,7 @@ public sealed class PdfOpenWorkflowHandler
 
         try
         {
-            _pdfLauncher.Open(filePath);
+            _shellLauncher.Open(filePath);
         }
         catch (Exception ex)
         {

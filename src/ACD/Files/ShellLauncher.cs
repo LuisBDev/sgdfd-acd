@@ -1,8 +1,8 @@
 using System.Diagnostics;
 
-namespace ACD.PdfOpen;
+namespace ACD.Files;
 
-public sealed class ShellPdfLauncher : IPdfLauncher
+public sealed class ShellLauncher : IShellLauncher
 {
     public void Open(string filePath)
     {
@@ -14,6 +14,6 @@ public sealed class ShellPdfLauncher : IPdfLauncher
         });
 
         if (process is null)
-            throw new InvalidOperationException("Windows did not start a process for the PDF file");
+            throw new InvalidOperationException("Windows did not start a process for the file");
     }
 }

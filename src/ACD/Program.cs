@@ -1,5 +1,6 @@
 using System.Reflection;
 using ACD.Configuration;
+using ACD.DocumentEdit;
 using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
@@ -110,10 +111,13 @@ builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
 builder.Services.AddSingleton<IFirmaSignerResolver, RegistryFirmaSignerResolver>();
 builder.Services.AddSingleton<IFirmaCommandBuilder, FirmaOnpeCommandBuilder>();
 builder.Services.AddSingleton<IFirmaLauncher, FirmaLauncher>();
-builder.Services.AddSingleton<IPdfLauncher, ShellPdfLauncher>();
+builder.Services.AddSingleton<IShellLauncher, ShellLauncher>();
 builder.Services.AddSingleton(sp => new PdfOpenStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
     sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
+builder.Services.AddSingleton(sp => new DocumentEditStorage(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
+    sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());

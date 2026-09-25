@@ -1,4 +1,5 @@
 using ACD.Configuration;
+using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
 using ACD.PdfOpen;
@@ -12,21 +13,21 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly ILoggerFactory _loggerFactory;
     private readonly AcdOptions _options;
-    private readonly IPdfLauncher _pdfLauncher;
+    private readonly IShellLauncher _shellLauncher;
     private readonly PdfOpenStorage _pdfOpenStorage;
     private readonly ISessionGate _sessionGate;
 
     public AcdSessionHandlerFactory(
         IOptions<AcdOptions> options,
         IFirmaLauncher firmaLauncher,
-        IPdfLauncher pdfLauncher,
+        IShellLauncher shellLauncher,
         PdfOpenStorage pdfOpenStorage,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
         _options = options.Value;
         _firmaLauncher = firmaLauncher;
-        _pdfLauncher = pdfLauncher;
+        _shellLauncher = shellLauncher;
         _pdfOpenStorage = pdfOpenStorage;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
@@ -51,7 +52,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         var pdfOpenHandler = new PdfOpenWorkflowHandler(
             _options.PdfOpen,
             _pdfOpenStorage,
-            _pdfLauncher,
+            _shellLauncher,
             logger,
             sessionId);
 
