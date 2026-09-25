@@ -115,6 +115,7 @@ builder.Services.AddSingleton<IShellLauncher, ShellLauncher>();
 builder.Services.AddSingleton(sp => new PdfOpenStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
     sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
+builder.Services.AddSingleton<IEditedPdfWatcherFactory, EditedPdfWatcherFactory>();
 builder.Services.AddSingleton(sp => new DocumentEditStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
     sp.GetRequiredService<ILogger<DocumentEditStorage>>()));

@@ -63,7 +63,7 @@ public static class DocumentEditRequestValidator
 
     private static bool IsAllowedExtension(string extension, DocumentEditOptions options) =>
         extension.Length > 0
-        && options.AllowedExtensions.Any(allowed => string.Equals(allowed, extension, StringComparison.OrdinalIgnoreCase));
+        && options.GetAllowedExtensions().Contains(extension);
 
     private static bool Fail(string code, string message, out string errorCode, out string errorMessage)
     {
