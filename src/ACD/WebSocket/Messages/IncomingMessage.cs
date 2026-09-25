@@ -39,3 +39,18 @@ public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("filename")]
     string Filename);
+
+public sealed record EditDocumentMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256);
+
+public sealed record RequestEditedPdfMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId);
+
+public sealed record CancelEditMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId);

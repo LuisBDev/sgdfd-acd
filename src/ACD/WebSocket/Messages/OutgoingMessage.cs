@@ -73,3 +73,39 @@ public sealed record PdfOpenedMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfOpened;
 }
+
+public sealed record DocumentOpenedMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.DocumentOpened;
+}
+
+public sealed record EditedPdfReadyMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("version")]
+    int Version)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdfReady;
+}
+
+public sealed record EditedPdfMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("size")] long Size)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdf;
+}
+
+public sealed record EditTimeoutMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditTimeout;
+}

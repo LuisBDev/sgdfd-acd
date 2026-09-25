@@ -1,4 +1,5 @@
 using ACD.Configuration;
+using ACD.DocumentEdit;
 using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
@@ -10,6 +11,8 @@ namespace ACD.WebSocket;
 
 public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
+    private readonly DocumentEditStorage _documentEditStorage;
+    private readonly IEditedPdfWatcherFactory _editedPdfWatcherFactory;
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly ILoggerFactory _loggerFactory;
     private readonly AcdOptions _options;
@@ -22,6 +25,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         IFirmaLauncher firmaLauncher,
         IShellLauncher shellLauncher,
         PdfOpenStorage pdfOpenStorage,
+        DocumentEditStorage documentEditStorage,
+        IEditedPdfWatcherFactory editedPdfWatcherFactory,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
@@ -29,6 +34,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _firmaLauncher = firmaLauncher;
         _shellLauncher = shellLauncher;
         _pdfOpenStorage = pdfOpenStorage;
+        _documentEditStorage = documentEditStorage;
+        _editedPdfWatcherFactory = editedPdfWatcherFactory;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
@@ -56,6 +63,14 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
+        var documentEditHandler = new DocumentEditWorkflowHandler(
+            _options.DocumentEdit,
+            _documentEditStorage,
+            _editedPdfWatcherFactory,
+            _shellLauncher,
+            logger,
+            sessionId);
+
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentEditHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

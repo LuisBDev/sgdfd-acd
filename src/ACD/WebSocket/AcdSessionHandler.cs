@@ -1,6 +1,7 @@
 using System.Net.WebSockets;
 using System.Reflection;
 using System.Text.Json;
+using ACD.DocumentEdit;
 using ACD.Firma;
 using ACD.Firma.Signing;
 using ACD.PdfOpen;
@@ -12,10 +13,11 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandler
 {
     private const int ProtocolVersion = 2;
-    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open"];
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.edit"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
+    private readonly DocumentEditWorkflowHandler _documentEditHandler;
     private readonly FirmaWorkflowHandler _firmaHandler;
     private readonly ILogger _logger;
     private readonly PdfOpenWorkflowHandler _pdfOpenHandler;
@@ -30,6 +32,7 @@ public sealed class AcdSessionHandler
     public AcdSessionHandler(
         FirmaWorkflowHandler firmaHandler,
         PdfOpenWorkflowHandler pdfOpenHandler,
+        DocumentEditWorkflowHandler documentEditHandler,
         ISessionGate sessionGate,
         ILogger logger,
         string sessionId,
@@ -37,6 +40,7 @@ public sealed class AcdSessionHandler
     {
         _firmaHandler = firmaHandler;
         _pdfOpenHandler = pdfOpenHandler;
+        _documentEditHandler = documentEditHandler;
         _sessionGate = sessionGate;
         _logger = logger;
         _sessionId = sessionId;
@@ -60,7 +64,8 @@ public sealed class AcdSessionHandler
 
             while (webSocket.State == WebSocketState.Open && !ct.IsCancellationRequested)
             {
-                var (kind, payload) = await WebSocketTransport.ReceiveFrameAsync(webSocket, ct);
+                var maxFrameBytes = _state == SessionState.ReceivingDocumentToEdit ? _documentEditHandler.PendingSize : null;
+                var (kind, payload) = await WebSocketTransport.ReceiveFrameAsync(webSocket, ct, maxFrameBytes);
 
                 if (kind == FrameKind.Close)
                 {
@@ -68,8 +73,21 @@ public sealed class AcdSessionHandler
                     break;
                 }
 
+                if (kind == FrameKind.TooLarge)
+                {
+                    _logger.LogWarning("[{SessionId}] Frame mayor al tamaño declarado en EDIT_DOCUMENT", _sessionId);
+                    await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.InvalidFileSize, "Frame exceeds the size declared in EDIT_DOCUMENT", 1008, _logger, _sessionId, ct);
+                    return;
+                }
+
                 if (kind == FrameKind.Binary)
                 {
+                    if (_state == SessionState.ReceivingDocumentToEdit && _documentEditHandler.HasPendingRequest)
+                    {
+                        _state = await _documentEditHandler.HandleBinaryFrameAsync(webSocket, payload!, ct);
+                        continue;
+                    }
+
                     if (_state == SessionState.ReceivingPdfToOpen && _pdfOpenHandler.HasPendingRequest)
                     {
                         _state = await _pdfOpenHandler.HandleBinaryFrameAsync(webSocket, payload!, ct);
@@ -79,7 +97,7 @@ public sealed class AcdSessionHandler
                     if (_state != SessionState.ReceivingFile || _firmaHandler.CurrentFilename is null)
                     {
                         _logger.LogWarning("[{SessionId}] Se recibió un frame binario en estado inesperado {State}", _sessionId, _state);
-                        await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.UnexpectedMessage, "Binary frame received in wrong state", 1011, _logger, _sessionId, ct);
+                        await SendErrorAndCloseAsync(webSocket, ErrorCatalog.UnexpectedMessage, "Binary frame received in wrong state", 1011, ct);
                         return;
                     }
 
@@ -92,7 +110,7 @@ public sealed class AcdSessionHandler
                 var baseMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.BaseMessage);
                 if (baseMsg is null)
                 {
-                    await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.UnknownMessageType, "Could not parse message type", 1011, _logger, _sessionId, ct);
+                    await SendErrorAndCloseAsync(webSocket, ErrorCatalog.UnknownMessageType, "Could not parse message type", 1011, ct);
                     return;
                 }
 
@@ -112,6 +130,7 @@ public sealed class AcdSessionHandler
             _logger.LogError(ex, "[{SessionId}] Excepción no controlada en el manejador de sesión", _sessionId);
             try
             {
+                await _documentEditHandler.DisposeAsync();
                 await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.InternalError, ex.Message, 1011, _logger, _sessionId, ct);
             }
             catch
@@ -121,6 +140,8 @@ public sealed class AcdSessionHandler
         }
         finally
         {
+            await _documentEditHandler.DisposeAsync();
+
             if (_operation is { } operation)
             {
                 _sessionGate.Release(operation);
@@ -162,6 +183,25 @@ public sealed class AcdSessionHandler
                 _state = await _pdfOpenHandler.PrepareAsync(webSocket, openPdfMsg, ct);
                 break;
 
+            case (SessionState.Authenticated, MessageType.EditDocument):
+                var editMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.EditDocumentMessage);
+                if (editMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.DocumentEdit, ct)) return;
+                _state = await _documentEditHandler.PrepareAsync(webSocket, editMsg, ct);
+                break;
+
+            case (SessionState.EditingDocument, MessageType.RequestEditedPdf):
+                var requestEditedMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.RequestEditedPdfMessage);
+                if (requestEditedMsg is null) break;
+                _state = await _documentEditHandler.SendEditedPdfAsync(webSocket, requestEditedMsg, ct);
+                break;
+
+            case (SessionState.EditingDocument, MessageType.CancelEdit):
+                var cancelEditMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.CancelEditMessage);
+                if (cancelEditMsg is null) break;
+                _state = await _documentEditHandler.CancelAsync(webSocket, cancelEditMsg, ct);
+                break;
+
             case (SessionState.Connected, _):
                 _logger.LogWarning("[{SessionId}] Se recibió {Type} antes de AUTH", _sessionId, messageType);
                 await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.AuthRequired, "Authentication required before sending data", 1008, _logger, _sessionId, ct);
@@ -198,7 +238,7 @@ public sealed class AcdSessionHandler
                     "[{SessionId}] Tipo de mensaje inesperado {Type} en estado {State}",
                     _sessionId, messageType, _state);
                 var errorCode = IsKnownMessageType(messageType) ? ErrorCatalog.UnexpectedMessage : ErrorCatalog.UnknownMessageType;
-                await WebSocketTransport.SendErrorAndCloseAsync(webSocket, errorCode, $"Message type {messageType} not valid in state {_state}", 1011, _logger, _sessionId, ct);
+                await SendErrorAndCloseAsync(webSocket, errorCode, $"Message type {messageType} not valid in state {_state}", 1011, ct);
                 return;
         }
     }
@@ -232,9 +272,12 @@ public sealed class AcdSessionHandler
             await WebSocketTransport.SendErrorAndCloseAsync(
                 webSocket,
                 ErrorCatalog.SessionBusy,
-                operation == SessionOperation.Signing
-                    ? "Another signing operation is already active"
-                    : "Another PDF opening operation is already active",
+                operation switch
+                {
+                    SessionOperation.Signing => "Another signing operation is already active",
+                    SessionOperation.DocumentEdit => "Another document edit operation is already active",
+                    _ => "Another PDF opening operation is already active"
+                },
                 4002,
                 _logger,
                 _sessionId,
@@ -247,10 +290,23 @@ public sealed class AcdSessionHandler
         return true;
     }
 
+    private Task SendErrorAndCloseAsync(
+        NativeWebSocket webSocket,
+        string code,
+        string message,
+        int closeCode,
+        CancellationToken ct) =>
+        _state == SessionState.EditingDocument
+            ? _documentEditHandler.SendErrorAndCloseAsync(webSocket, code, message, closeCode, ct)
+            : WebSocketTransport.SendErrorAndCloseAsync(webSocket, code, message, closeCode, _logger, _sessionId, ct);
+
     private static bool IsKnownMessageType(string type)
     {
         return type is MessageType.Auth or MessageType.PdfDownload or MessageType.OpenPdf or MessageType.RequestSignedFile
+            or MessageType.EditDocument or MessageType.RequestEditedPdf or MessageType.CancelEdit
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
-            or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout or MessageType.Error;
+            or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout
+            or MessageType.DocumentOpened or MessageType.EditedPdfReady or MessageType.EditedPdf or MessageType.EditTimeout
+            or MessageType.Error;
     }
 }

@@ -8,6 +8,9 @@ namespace ACD.WebSocket.Messages;
 [JsonSerializable(typeof(PdfDownloadMessage))]
 [JsonSerializable(typeof(OpenPdfMessage))]
 [JsonSerializable(typeof(RequestSignedFileMessage))]
+[JsonSerializable(typeof(EditDocumentMessage))]
+[JsonSerializable(typeof(RequestEditedPdfMessage))]
+[JsonSerializable(typeof(CancelEditMessage))]
 [JsonSerializable(typeof(AuthOkMessage))]
 [JsonSerializable(typeof(ConnectedMessage))]
 [JsonSerializable(typeof(PdfReceivedMessage))]
@@ -15,6 +18,10 @@ namespace ACD.WebSocket.Messages;
 [JsonSerializable(typeof(FirmaDisponibleMessage))]
 [JsonSerializable(typeof(SignedFileMessage))]
 [JsonSerializable(typeof(FirmaTimeoutMessage))]
+[JsonSerializable(typeof(DocumentOpenedMessage))]
+[JsonSerializable(typeof(EditedPdfReadyMessage))]
+[JsonSerializable(typeof(EditedPdfMessage))]
+[JsonSerializable(typeof(EditTimeoutMessage))]
 [JsonSerializable(typeof(ErrorMessage))]
 public partial class AcdJsonContext : JsonSerializerContext
 {
