@@ -9,6 +9,7 @@ namespace ACD.WebSocket;
 public static class WebSocketTransport
 {
     private const int BufferSize = 64 * 1024;
+    private const int FileChunkSize = 64 * 1024;
 
     public static async Task<(FrameKind Kind, byte[]? Payload)> ReceiveFrameAsync(
         NativeWebSocket webSocket,
@@ -41,6 +42,31 @@ public static class WebSocketTransport
     {
         var json = JsonSerializer.SerializeToUtf8Bytes(message, typeInfo);
         await webSocket.SendAsync(json, WebSocketMessageType.Text, true, ct).ConfigureAwait(false);
+    }
+
+    public static async Task SendFileAsync(
+        NativeWebSocket webSocket,
+        string filePath,
+        long length,
+        CancellationToken ct)
+    {
+        await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
+            FileChunkSize, true);
+
+        var buffer = new byte[FileChunkSize];
+        var remaining = length;
+        int bytesRead;
+
+        while ((bytesRead = await fs.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
+        {
+            remaining -= bytesRead;
+            var endOfMessage = remaining <= 0;
+            await webSocket.SendAsync(
+                buffer.AsMemory(0, bytesRead),
+                WebSocketMessageType.Binary,
+                endOfMessage,
+                ct).ConfigureAwait(false);
+        }
     }
 
     public static async Task SendErrorAndCloseAsync(

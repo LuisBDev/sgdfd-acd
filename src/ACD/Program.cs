@@ -1,5 +1,6 @@
 using System.Reflection;
 using ACD.Configuration;
+using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
 using ACD.Hosting;
@@ -101,6 +102,7 @@ builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("U
 
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
 builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactory>();
+builder.Services.AddSingleton<IStableFileProbe, StableFileProbe>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
