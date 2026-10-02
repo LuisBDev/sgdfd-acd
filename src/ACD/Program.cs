@@ -9,6 +9,7 @@ using ACD.PdfOpen;
 using ACD.Tray;
 using ACD.Update;
 using ACD.WebSocket;
+using ACD.Workstation;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Velopack;
@@ -139,6 +140,7 @@ builder.Services.AddSingleton(sp => new Lazy<IUpdateTrigger>(() => sp.GetRequire
 var app = builder.Build();
 app.UseWebSockets();
 app.UseMiddleware<AcdWebSocketMiddleware>();
+app.MapMethods("/acd/info", ["GET", "OPTIONS"], WorkstationInfoEndpoint.Handle);
 
 var acdOptions = app.Services.GetRequiredService<IOptions<AcdOptions>>().Value;
 PortRegistry.Write(packId, acdOptions.Port);
