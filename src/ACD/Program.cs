@@ -119,6 +119,7 @@ builder.Services.AddSingleton(sp => new PdfOpenStorage(
 builder.Services.AddSingleton<IEditedPdfWatcherFactory, EditedPdfWatcherFactory>();
 builder.Services.AddSingleton(sp => new DocumentEditStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
+    TimeProvider.System,
     sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
 
 builder.Services.AddSingleton<TrayIconService>();

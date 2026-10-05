@@ -4,13 +4,17 @@ public sealed class DocumentEditOptions
 {
     private static readonly string[] DefaultAllowedExtensions = [".docx"];
 
+    public string RootDirectory { get; init; } = string.Empty;
     public string[] AllowedExtensions { get; init; } = [];
     public long MaxFileBytes { get; init; } = 20 * 1024 * 1024;
-    public int RetentionHours { get; init; } = 24;
-    public long MaxStorageBytes { get; init; } = 500 * 1024 * 1024;
     public int TimeoutMinutes { get; init; } = 60;
     public int PdfDebounceMilliseconds { get; init; } = 1500;
     public int PdfStabilizationTimeoutSeconds { get; init; } = 30;
+
+    public string GetRootDirectory() =>
+        string.IsNullOrWhiteSpace(RootDirectory)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "TDOCUMENTOS", "MPD")
+            : Path.GetFullPath(Environment.ExpandEnvironmentVariables(RootDirectory.Trim()));
 
     public IReadOnlySet<string> GetAllowedExtensions()
     {
