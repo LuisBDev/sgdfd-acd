@@ -34,13 +34,13 @@ Opens an editable document (default: `.docx`, configurable through `Acd:Document
 | ACD → Web | `EDIT_TIMEOUT` | `requestId` |
 
 1. `EDIT_DOCUMENT` is validated before the binary frame is read: `size` above `MaxFileBytes` or a frame larger than the declared `size` is rejected with `INVALID_FILE_SIZE`.
-2. The document is stored in `%LOCALAPPDATA%\ACD\Temp\DocumentEdit\<requestId>\`, the PDF watcher is armed on that folder and only then the document is opened.
+2. The document is stored in `Documents\TDOCUMENTOS\MPD\<yyyy>\<MM>\<dd>\<requestId>\` (local date of the save; missing folders are created), the PDF watcher is armed on that folder and only then the document is opened.
 3. Each valid PDF (`%PDF-` … `%%EOF`, stable on disk, new content) saved in that folder produces `EDITED_PDF_READY` with an increasing `version`.
 4. `REQUEST_EDITED_PDF` may be sent any number of times; ACD answers with the latest version. The binary message is split in 64 KB fragments and its length always equals `EDITED_PDF.size`. When no PDF can be delivered yet, ACD answers `EDITED_PDF_UNAVAILABLE` instead and the session stays open: `code` is `EDIT_PDF_NOT_READY` (no PDF saved yet) or `EDIT_PDF_READ_FAILED` (the PDF is being written; retry).
 5. `CANCEL_EDIT` stops the watcher and closes the socket with `1000`. Closing the socket from the web side has the same effect.
 6. After `TimeoutMinutes` (default 60) since `DOCUMENT_OPENED`, ACD sends `EDIT_TIMEOUT` and closes with `1000`.
 
-The editor may stay open after the session ends, so the folder is never deleted on close; it is removed by retention (`RetentionHours`, default 24) the next time a document is stored.
+The root folder is the user's Documents folder (`SpecialFolder.MyDocuments`, so a OneDrive redirection is honored) plus `TDOCUMENTOS\MPD`; `Acd:DocumentEdit:RootDirectory` overrides it (environment variables are expanded). Files are kept permanently: there is no retention and no cumulative storage quota, only `MaxFileBytes` per document. The folder of a request is deleted only when Windows could not open the document.
 
 `ERROR` codes (all terminal):
 
@@ -49,7 +49,6 @@ The editor may stay open after the session ends, so the folder is never deleted 
 | `EDIT_INVALID_REQUEST` | `SYSTEM` | Invalid `requestId`, `filename`, extension or `sha256` format; `requestId` not matching the active edit |
 | `INVALID_FILE_SIZE` | `SYSTEM` | `size` out of range or binary payload size mismatch |
 | `EDIT_HASH_MISMATCH` | `SYSTEM` | Binary payload does not match `sha256` |
-| `STORAGE_LIMIT_EXCEEDED` | `TRANSIENT` | `MaxStorageBytes` reached |
 | `WRITE_FAILED` | `TRANSIENT` | The document could not be stored |
 | `EDIT_LAUNCH_FAILED` | `USER_ACTIONABLE` | Windows could not open the document |
 | `READ_FAILED` | `TRANSIENT` | Reading the PDF failed after `EDITED_PDF` was sent |

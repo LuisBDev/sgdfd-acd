@@ -99,11 +99,6 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
         {
             workspace = await _storage.SaveSourceAsync(request, data, ct).ConfigureAwait(false);
         }
-        catch (DocumentEditStorageLimitException)
-        {
-            await WebSocketTransport.SendErrorAndCloseAsync(ws, ErrorCatalog.StorageLimitExceeded, "Temporary document storage limit exceeded", 1011, _logger, _sessionId, ct);
-            return SessionState.Closed;
-        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             _logger.LogError(ex, "[{SessionId}] No se pudo guardar el documento a editar", _sessionId);
@@ -123,7 +118,7 @@ public sealed class DocumentEditWorkflowHandler : IAsyncDisposable
             _logger.LogError(ex, "[{SessionId}] Windows no pudo abrir el documento a editar", _sessionId);
             await watcher.DisposeAsync();
             editCts.Dispose();
-            _storage.DeleteWorkspaceBestEffort(workspace.RequestId);
+            _storage.DeleteWorkspaceBestEffort(workspace);
             await WebSocketTransport.SendErrorAndCloseAsync(ws, ErrorCatalog.EditLaunchFailed, "Windows could not open the document editor", 1011, _logger, _sessionId, ct);
             return SessionState.Closed;
         }
