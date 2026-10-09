@@ -25,11 +25,6 @@ public static class ErrorCatalog
     public const string ProcessStartFailed = "PROCESS_START_FAILED";
     public const string FileLocked = "FILE_LOCKED";
     public const string ReadFailed = "READ_FAILED";
-    public const string EditInvalidRequest = "EDIT_INVALID_REQUEST";
-    public const string EditHashMismatch = "EDIT_HASH_MISMATCH";
-    public const string EditLaunchFailed = "EDIT_LAUNCH_FAILED";
-    public const string EditPdfNotReady = "EDIT_PDF_NOT_READY";
-    public const string EditPdfReadFailed = "EDIT_PDF_READ_FAILED";
     public const string UnexpectedMessage = "UNEXPECTED_MESSAGE";
     public const string UnknownMessageType = "UNKNOWN_MESSAGE_TYPE";
     public const string InternalError = "INTERNAL_ERROR";
@@ -62,9 +57,6 @@ public static class ErrorCatalog
         [ProcessStartFailed] = ErrorCategory.UserActionable,
         [FileLocked] = ErrorCategory.UserActionable,
         [ReadFailed] = ErrorCategory.Transient,
-        [EditInvalidRequest] = ErrorCategory.System,
-        [EditHashMismatch] = ErrorCategory.System,
-        [EditLaunchFailed] = ErrorCategory.UserActionable,
         [UnexpectedMessage] = ErrorCategory.System,
         [UnknownMessageType] = ErrorCategory.System,
         [InternalError] = ErrorCategory.System,

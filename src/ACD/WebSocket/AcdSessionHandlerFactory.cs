@@ -1,5 +1,4 @@
 using ACD.Configuration;
-using ACD.DocumentEdit;
 using ACD.DocumentWorkspace;
 using ACD.Files;
 using ACD.Firma;
@@ -13,8 +12,6 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
     private readonly IConversionService _conversionService;
-    private readonly DocumentEditStorage _documentEditStorage;
-    private readonly IEditedPdfWatcherFactory _editedPdfWatcherFactory;
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly ILoggerFactory _loggerFactory;
     private readonly AcdOptions _options;
@@ -29,8 +26,6 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         IFirmaLauncher firmaLauncher,
         IShellLauncher shellLauncher,
         PdfOpenStorage pdfOpenStorage,
-        DocumentEditStorage documentEditStorage,
-        IEditedPdfWatcherFactory editedPdfWatcherFactory,
         WorkspacePaths workspacePaths,
         WorkspaceFileStore workspaceFileStore,
         IConversionService conversionService,
@@ -41,8 +36,6 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _firmaLauncher = firmaLauncher;
         _shellLauncher = shellLauncher;
         _pdfOpenStorage = pdfOpenStorage;
-        _documentEditStorage = documentEditStorage;
-        _editedPdfWatcherFactory = editedPdfWatcherFactory;
         _workspacePaths = workspacePaths;
         _workspaceFileStore = workspaceFileStore;
         _conversionService = conversionService;
@@ -73,16 +66,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        var documentEditHandler = new DocumentEditWorkflowHandler(
-            _options.DocumentEdit,
-            _documentEditStorage,
-            _editedPdfWatcherFactory,
-            _shellLauncher,
-            logger,
-            sessionId);
-
         var documentWorkspaceHandler = new DocumentWorkspaceHandler(
-            _options.DocumentEdit,
+            _options.DocumentWorkspace,
             _workspacePaths,
             _workspaceFileStore,
             _shellLauncher,
@@ -90,6 +75,6 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentEditHandler, documentWorkspaceHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentWorkspaceHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

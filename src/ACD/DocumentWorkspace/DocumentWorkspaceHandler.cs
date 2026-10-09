@@ -18,7 +18,7 @@ public sealed class DocumentWorkspaceHandler
 
     private readonly IConversionService _conversionService;
     private readonly ILogger _logger;
-    private readonly DocumentEditOptions _options;
+    private readonly DocumentWorkspaceOptions _options;
     private readonly WorkspacePaths _paths;
     private readonly string _sessionId;
     private readonly IShellLauncher _shellLauncher;
@@ -26,7 +26,7 @@ public sealed class DocumentWorkspaceHandler
     private PendingWrite? _pending;
 
     public DocumentWorkspaceHandler(
-        DocumentEditOptions options,
+        DocumentWorkspaceOptions options,
         WorkspacePaths paths,
         WorkspaceFileStore store,
         IShellLauncher shellLauncher,

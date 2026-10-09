@@ -3,7 +3,7 @@ using ACD.Configuration;
 
 namespace ACD.DocumentWorkspace;
 
-public sealed partial class WorkspacePaths(DocumentEditOptions options)
+public sealed partial class WorkspacePaths(DocumentWorkspaceOptions options)
 {
     public bool TryGetRemitoDirectory(string anio, string numeroEmision, out string directory)
     {

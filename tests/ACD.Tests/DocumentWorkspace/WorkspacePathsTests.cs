@@ -10,7 +10,7 @@ public sealed class WorkspacePathsTests : IDisposable
     [Fact]
     public void Builds_the_remito_directory_under_the_root()
     {
-        var paths = new WorkspacePaths(new DocumentEditOptions { RootDirectory = _root });
+        var paths = new WorkspacePaths(new DocumentWorkspaceOptions { RootDirectory = _root });
 
         var ok = paths.TryGetRemitoDirectory("2026", "0000121972", out var directory);
 
@@ -25,7 +25,7 @@ public sealed class WorkspacePathsTests : IDisposable
     [InlineData("2026", "12345678901")]
     public void Rejects_invalid_remito_keys(string anio, string numeroEmision)
     {
-        var paths = new WorkspacePaths(new DocumentEditOptions { RootDirectory = _root });
+        var paths = new WorkspacePaths(new DocumentWorkspaceOptions { RootDirectory = _root });
 
         Assert.False(paths.TryGetRemitoDirectory(anio, numeroEmision, out _));
     }

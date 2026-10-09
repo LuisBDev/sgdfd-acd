@@ -1,6 +1,5 @@
 using System.Reflection;
 using ACD.Configuration;
-using ACD.DocumentEdit;
 using ACD.DocumentWorkspace;
 using ACD.Files;
 using ACD.Firma;
@@ -117,15 +116,10 @@ builder.Services.AddSingleton<IShellLauncher, ShellLauncher>();
 builder.Services.AddSingleton(sp => new PdfOpenStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
     sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
-builder.Services.AddSingleton<IEditedPdfWatcherFactory, EditedPdfWatcherFactory>();
-builder.Services.AddSingleton(sp => new DocumentEditStorage(
-    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
-    TimeProvider.System,
-    sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
 builder.Services.AddSingleton(sp => new WorkspacePaths(
-    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit));
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace));
 builder.Services.AddSingleton(sp => new WorkspaceFileStore(
-    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.MaxFileBytes));
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.MaxFileBytes));
 builder.Services.AddSingleton<WinWordProcesses>();
 builder.Services.AddSingleton<IConversionService>(sp =>
 {
@@ -134,7 +128,7 @@ builder.Services.AddSingleton<IConversionService>(sp =>
         WordComConversionService.CreateWordApplication,
         wordProcesses,
         new WordConversionSettings(
-            sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.GetConversionTimeout(),
+            sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.GetConversionTimeout(),
             TimeSpan.FromSeconds(5),
             Path.Combine(Path.GetTempPath(), "acd-conv")),
         sp.GetRequiredService<ILogger<WordComConversionService>>());

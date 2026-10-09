@@ -7,8 +7,6 @@ public enum SessionState
     Authenticated,
     ReceivingFile,
     ReceivingPdfToOpen,
-    ReceivingDocumentToEdit,
-    EditingDocument,
     ReceivingWorkspaceFile,
     WatchingFirma,
     SendingFile,
