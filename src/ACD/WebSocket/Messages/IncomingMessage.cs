@@ -77,3 +77,13 @@ public sealed record OpenFolderMessage(
     [property: JsonPropertyName("requestId")] string? RequestId,
     [property: JsonPropertyName("anio")] string? Anio,
     [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
+
+public sealed record WatchWorkspaceMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
+
+public sealed record StopWatchMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId);

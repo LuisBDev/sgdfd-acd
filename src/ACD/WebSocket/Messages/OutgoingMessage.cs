@@ -133,3 +133,22 @@ public sealed record PdfContentMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfContent;
 }
+
+public sealed record WorkspaceWatchingMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("folder")] string Folder,
+    [property: JsonPropertyName("latestWord")]
+    LatestWordPayload? LatestWord)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceWatching;
+}
+
+public sealed record WorkspaceChangedMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("latestWord")]
+    LatestWordPayload? LatestWord)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceChanged;
+}

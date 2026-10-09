@@ -16,7 +16,7 @@ The agent is launched on demand via a custom URI scheme (`acd://`) registered in
 
 ## WebSocket Protocol
 
-Every session starts with `CONNECTED` (sent by ACD) followed by `AUTH` → `AUTH_OK`. `CONNECTED.capabilities` announces the supported operations: `pdf.sign.firma-onpe`, `pdf.open` and `document.workspace` (`protocolVersion` stays `2`). A session runs a single operation type; ACD allows one active operation per type (`SESSION_BUSY`, close `4002`, otherwise). Every `ERROR` frame (`code`, `message`, `category`) is terminal: ACD closes the socket right after it. Recoverable conditions use their own message types.
+Every session starts with `CONNECTED` (sent by ACD) followed by `AUTH` → `AUTH_OK`. `CONNECTED.capabilities` announces the supported operations: `pdf.sign.firma-onpe`, `pdf.open`, `document.workspace` and `document.workspace.watch` (`protocolVersion` stays `2`). A session runs a single operation type; ACD allows one active operation per type (`SESSION_BUSY`, close `4002`, otherwise). Watch sessions are the exception: they take no operation slot (see below). Every `ERROR` frame (`code`, `message`, `category`) is terminal: ACD closes the socket right after it. Recoverable conditions use their own message types.
 
 ### Document workspace (`document.workspace`)
 
@@ -46,11 +46,28 @@ For binary payloads the JSON declares `size` (1 to `Acd:DocumentWorkspace:MaxFil
 5. The workspace commands other than `CONVERT_TO_PDF` share one slot, so a second one while another is active returns `SESSION_BUSY` (close `4002`).
 6. A binary payload that does not match the declared `size` or `sha256`, or a frame larger than the declared size, returns `WORKSPACE_INTEGRITY`.
 
+#### Watching the remito folder (`document.workspace.watch`)
+
+A watch session stays open and pushes the Word of the remito every time it changes: `AUTH` → `AUTH_OK`, `WATCH_WORKSPACE`, then `WORKSPACE_WATCHING` and any number of `WORKSPACE_CHANGED` until the web sends `STOP_WATCH`, which ACD answers by closing with `1000`.
+
+| Direction | Message | Fields |
+|-----------|---------|--------|
+| Web → ACD | `WATCH_WORKSPACE` | `requestId` (UUID), `anio`, `numeroEmision` |
+| ACD → Web | `WORKSPACE_WATCHING` | `requestId`, `folder` (absolute path of the remito folder), `latestWord` or `null` |
+| ACD → Web (push) | `WORKSPACE_CHANGED` | `requestId`, `latestWord` or `null` |
+| Web → ACD | `STOP_WATCH` | `requestId`. ACD closes with `1000` |
+
+- `latestWord` is `{ filename, changedAt, size, sha256 }`: the Word of the remito as defined above, `changedAt` its effective date in local time (`yyyy-MM-ddTHH:mm:ss`) and `sha256` in lowercase hexadecimal. `null` means the folder has no Word.
+- `WATCH_WORKSPACE` creates the remito folder when it is missing. `WORKSPACE_WATCHING` carries the initial snapshot; every push carries the same `requestId`.
+- Changes are debounced (`Acd:DocumentWorkspace:WatchDebounceMilliseconds`, default 1000) and wait for the file to be stable, so a Word save through a temporary file and a rename yields one final push. A snapshot equal to the last one sent is not pushed again.
+- While watching, ACD keeps reading the socket: only `STOP_WATCH` and the WebSocket close are accepted. A `STOP_WATCH` with another `requestId` returns `INVALID_REQUEST_ID`; any other message returns `UNEXPECTED_MESSAGE`.
+- Watch sessions take no operation slot: several tabs can watch at the same time, within the global limit of 5 connections, and they never block the workspace commands. They do not count as active work for auto-update either, so an update may close them; the web reconnects and the new `WORKSPACE_WATCHING` corrects its state.
+
 `ERROR` codes (all terminal):
 
 | Code | Category | When |
 |------|----------|------|
-| `INVALID_REQUEST_ID` | `SYSTEM` | `requestId` is not a UUID |
+| `INVALID_REQUEST_ID` | `SYSTEM` | `requestId` is not a UUID, or `STOP_WATCH` carries a `requestId` other than the watched one |
 | `WORKSPACE_INVALID_KEY` | `USER_ACTIONABLE` | `anio` or `numeroEmision` has an invalid format |
 | `WORKSPACE_INVALID_FILENAME` | `USER_ACTIONABLE` | `filename` or `wordFilename` is not a safe `.docx` name |
 | `INVALID_FILE_SIZE` | `SYSTEM` | Declared `size` outside 1 to `MaxFileBytes`, a local `.docx` over the limit on `READ_WORD`, or a converted PDF over the limit |
@@ -63,6 +80,7 @@ For binary payloads the JSON declares `size` (1 to `Acd:DocumentWorkspace:MaxFil
 | `WORD_NOT_INSTALLED` | `USER_ACTIONABLE` | `CONVERT_TO_PDF`: Microsoft Word is not installed |
 | `CONVERSION_TIMEOUT` | `TRANSIENT` | Word did not finish the conversion within `ConversionTimeoutSeconds` |
 | `CONVERSION_FAILED` | `SYSTEM` | Word failed, or did not produce a valid PDF |
+| `WORKSPACE_WATCH_FAILED` | `SYSTEM` | `WATCH_WORKSPACE`: ACD could not create or watch the remito folder (close `1011`) |
 | `SESSION_BUSY` | `TRANSIENT` | Another workspace command or conversion is active (close `4002`) |
 
 ## Tech Stack

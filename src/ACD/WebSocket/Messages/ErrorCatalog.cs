@@ -38,6 +38,7 @@ public static class ErrorCatalog
     public const string WordNotInstalled = "WORD_NOT_INSTALLED";
     public const string ConversionTimeout = "CONVERSION_TIMEOUT";
     public const string ConversionFailed = "CONVERSION_FAILED";
+    public const string WorkspaceWatchFailed = "WORKSPACE_WATCH_FAILED";
 
     private static readonly IReadOnlyDictionary<string, string> Categories = new Dictionary<string, string>
     {
@@ -70,6 +71,7 @@ public static class ErrorCatalog
         [WordNotInstalled] = ErrorCategory.UserActionable,
         [ConversionTimeout] = ErrorCategory.Transient,
         [ConversionFailed] = ErrorCategory.System,
+        [WorkspaceWatchFailed] = ErrorCategory.System,
     };
 
     public static string CategoryOf(string code) =>

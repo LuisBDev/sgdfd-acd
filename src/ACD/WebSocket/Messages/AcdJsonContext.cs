@@ -20,11 +20,16 @@ namespace ACD.WebSocket.Messages;
 [JsonSerializable(typeof(WritePdfCopyMessage))]
 [JsonSerializable(typeof(OpenFolderMessage))]
 [JsonSerializable(typeof(ConvertToPdfMessage))]
+[JsonSerializable(typeof(WatchWorkspaceMessage))]
+[JsonSerializable(typeof(StopWatchMessage))]
 [JsonSerializable(typeof(WordWrittenMessage))]
 [JsonSerializable(typeof(WordContentMessage))]
 [JsonSerializable(typeof(PdfCopyWrittenMessage))]
 [JsonSerializable(typeof(FolderOpenedMessage))]
 [JsonSerializable(typeof(PdfContentMessage))]
+[JsonSerializable(typeof(LatestWordPayload))]
+[JsonSerializable(typeof(WorkspaceWatchingMessage))]
+[JsonSerializable(typeof(WorkspaceChangedMessage))]
 [JsonSerializable(typeof(ErrorMessage))]
 public partial class AcdJsonContext : JsonSerializerContext
 {

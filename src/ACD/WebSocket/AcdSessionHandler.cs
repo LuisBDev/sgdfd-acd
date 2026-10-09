@@ -13,7 +13,7 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandler
 {
     private const int ProtocolVersion = 2;
-    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace"];
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace", "document.workspace.watch"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
@@ -24,6 +24,7 @@ public sealed class AcdSessionHandler
     private readonly ISessionGate _sessionGate;
     private readonly string _sessionId;
     private readonly string _watchDirectory;
+    private readonly WorkspaceWatchSession _workspaceWatchSession;
     private string? _authToken;
     private SessionOperation? _operation;
 
@@ -33,6 +34,7 @@ public sealed class AcdSessionHandler
         FirmaWorkflowHandler firmaHandler,
         PdfOpenWorkflowHandler pdfOpenHandler,
         DocumentWorkspaceHandler documentWorkspaceHandler,
+        WorkspaceWatchSession workspaceWatchSession,
         ISessionGate sessionGate,
         ILogger logger,
         string sessionId,
@@ -41,6 +43,7 @@ public sealed class AcdSessionHandler
         _firmaHandler = firmaHandler;
         _pdfOpenHandler = pdfOpenHandler;
         _documentWorkspaceHandler = documentWorkspaceHandler;
+        _workspaceWatchSession = workspaceWatchSession;
         _sessionGate = sessionGate;
         _logger = logger;
         _sessionId = sessionId;
@@ -132,6 +135,7 @@ public sealed class AcdSessionHandler
             _logger.LogError(ex, "[{SessionId}] Excepción no controlada en el manejador de sesión", _sessionId);
             try
             {
+                await _workspaceWatchSession.DisposeAsync();
                 await WebSocketTransport.SendErrorAndCloseAsync(webSocket, ErrorCatalog.InternalError, ex.Message, 1011, _logger, _sessionId, ct);
             }
             catch
@@ -141,6 +145,8 @@ public sealed class AcdSessionHandler
         }
         finally
         {
+            await _workspaceWatchSession.DisposeAsync();
+
             if (_operation is { } operation)
             {
                 _sessionGate.Release(operation);
@@ -215,6 +221,18 @@ public sealed class AcdSessionHandler
                 if (convertMsg is null) break;
                 if (!await TryBeginOperationAsync(webSocket, SessionOperation.Conversion, ct)) return;
                 _state = await _documentWorkspaceHandler.PrepareConvertToPdfAsync(webSocket, convertMsg, ct);
+                break;
+
+            case (SessionState.Authenticated, MessageType.WatchWorkspace):
+                var watchMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.WatchWorkspaceMessage);
+                if (watchMsg is null) break;
+                _state = await _workspaceWatchSession.StartAsync(webSocket, watchMsg, ct);
+                break;
+
+            case (SessionState.WatchingWorkspace, MessageType.StopWatch):
+                var stopWatchMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.StopWatchMessage);
+                if (stopWatchMsg is null) break;
+                _state = await _workspaceWatchSession.StopAsync(webSocket, stopWatchMsg, ct);
                 break;
 
             case (SessionState.Connected, _):
@@ -306,13 +324,16 @@ public sealed class AcdSessionHandler
         return true;
     }
 
-    private Task SendErrorAndCloseAsync(
+    private async Task SendErrorAndCloseAsync(
         NativeWebSocket webSocket,
         string code,
         string message,
         int closeCode,
-        CancellationToken ct) =>
-        WebSocketTransport.SendErrorAndCloseAsync(webSocket, code, message, closeCode, _logger, _sessionId, ct);
+        CancellationToken ct)
+    {
+        await _workspaceWatchSession.DisposeAsync();
+        await WebSocketTransport.SendErrorAndCloseAsync(webSocket, code, message, closeCode, _logger, _sessionId, ct);
+    }
 
     private static bool IsKnownMessageType(string type)
     {
@@ -321,6 +342,7 @@ public sealed class AcdSessionHandler
             or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout
             or MessageType.WriteWord or MessageType.ReadWord or MessageType.WritePdfCopy or MessageType.OpenFolder or MessageType.ConvertToPdf
             or MessageType.WordWritten or MessageType.WordContent or MessageType.PdfCopyWritten or MessageType.FolderOpened or MessageType.PdfContent
+            or MessageType.WatchWorkspace or MessageType.StopWatch or MessageType.WorkspaceWatching or MessageType.WorkspaceChanged
             or MessageType.Error;
     }
 }

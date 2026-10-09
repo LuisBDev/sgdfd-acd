@@ -12,6 +12,8 @@ public static class MessageType
     public const string WritePdfCopy = "WRITE_PDF_COPY";
     public const string OpenFolder = "OPEN_FOLDER";
     public const string ConvertToPdf = "CONVERT_TO_PDF";
+    public const string WatchWorkspace = "WATCH_WORKSPACE";
+    public const string StopWatch = "STOP_WATCH";
 
     // Outgoing (ACD → MFD)
     public const string AuthOk = "AUTH_OK";
@@ -26,5 +28,7 @@ public static class MessageType
     public const string PdfCopyWritten = "PDF_COPY_WRITTEN";
     public const string FolderOpened = "FOLDER_OPENED";
     public const string PdfContent = "PDF_CONTENT";
+    public const string WorkspaceWatching = "WORKSPACE_WATCHING";
+    public const string WorkspaceChanged = "WORKSPACE_CHANGED";
     public const string Error = "ERROR";
 }

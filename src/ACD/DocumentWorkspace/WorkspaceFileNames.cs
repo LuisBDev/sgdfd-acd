@@ -1,9 +1,11 @@
+using System.Globalization;
 using ACD.Files;
 
 namespace ACD.DocumentWorkspace;
 
 public static class WorkspaceFileNames
 {
+    private const string LocalDateTimeFormat = "yyyy-MM-dd'T'HH:mm:ss";
     private const string WordExtension = ".docx";
     private const string PdfExtension = ".pdf";
     private const string LockFilePrefix = "~$";
@@ -31,6 +33,9 @@ public static class WorkspaceFileNames
 
     public static DateTime EffectiveChangedAt(DateTime creationTime, DateTime lastWriteTime) =>
         creationTime > lastWriteTime ? creationTime : lastWriteTime;
+
+    internal static string FormatLocal(DateTime value) =>
+        value.ToString(LocalDateTimeFormat, CultureInfo.InvariantCulture);
 
     public static string PdfCopyName(string wordFileName) =>
         Path.GetFileNameWithoutExtension(wordFileName) + PdfExtension;

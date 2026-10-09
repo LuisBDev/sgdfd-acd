@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.WebSockets;
 using System.Security.Cryptography;
 using ACD.Configuration;
@@ -11,9 +10,8 @@ namespace ACD.DocumentWorkspace;
 
 public sealed class DocumentWorkspaceHandler
 {
-    private const string LocalDateTimeFormat = "yyyy-MM-dd'T'HH:mm:ss";
     private const string WordExtension = ".docx";
-    private const int PolicyViolation = 1008;
+    private const int PolicyViolation = WorkspaceRequestValidation.PolicyViolation;
     private const int InternalFailure = 1011;
 
     private readonly IConversionService _conversionService;
@@ -49,7 +47,7 @@ public sealed class DocumentWorkspaceHandler
 
     public async Task<SessionState> PrepareWriteWordAsync(NativeWebSocket ws, WriteWordMessage message, CancellationToken ct)
     {
-        if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
             || !TryValidateWordName(message.Filename, out rejection)
             || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
             return await RejectAsync(ws, rejection!, ct);
@@ -61,7 +59,7 @@ public sealed class DocumentWorkspaceHandler
 
     public async Task<SessionState> PrepareWritePdfCopyAsync(NativeWebSocket ws, WritePdfCopyMessage message, CancellationToken ct)
     {
-        if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
             || !TryValidateWordName(message.WordFilename, out rejection)
             || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
             return await RejectAsync(ws, rejection!, ct);
@@ -73,7 +71,7 @@ public sealed class DocumentWorkspaceHandler
 
     public async Task<SessionState> PrepareConvertToPdfAsync(NativeWebSocket ws, ConvertToPdfMessage message, CancellationToken ct)
     {
-        if (!TryValidateRequestId(message.RequestId, out var rejection)
+        if (!WorkspaceRequestValidation.TryValidateRequestId(message.RequestId, out var rejection)
             || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
             return await RejectAsync(ws, rejection!, ct);
 
@@ -87,10 +85,10 @@ public sealed class DocumentWorkspaceHandler
         var pending = _pending;
         _pending = null;
         if (pending is null)
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.UnexpectedMessage, "No workspace write is pending", InternalFailure), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.UnexpectedMessage, "No workspace write is pending", InternalFailure), ct);
 
         if (!MatchesDeclaredContent(pending, data))
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceIntegrity, "Binary payload does not match the declared size and sha256", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "Binary payload does not match the declared size and sha256", PolicyViolation), ct);
 
         return pending.Kind switch
         {
@@ -102,7 +100,7 @@ public sealed class DocumentWorkspaceHandler
 
     public async Task<SessionState> SendWordAsync(NativeWebSocket ws, ReadWordMessage message, CancellationToken ct)
     {
-        if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
             || !TryValidateWordName(message.Filename, out rejection))
             return await RejectAsync(ws, rejection!, ct);
 
@@ -114,11 +112,11 @@ public sealed class DocumentWorkspaceHandler
         }
         catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
         {
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceFileNotFound, "The Word document does not exist in the remito folder", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileNotFound, "The Word document does not exist in the remito folder", PolicyViolation), ct);
         }
         catch (WorkspaceFileTooLargeException)
         {
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.InvalidFileSize, $"Document size must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.InvalidFileSize, $"Document size must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -127,7 +125,7 @@ public sealed class DocumentWorkspaceHandler
 
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new WordContentMessage(message.RequestId!, info.FileName, info.Size, info.Sha256, FormatLocal(info.ChangedAt)),
+            new WordContentMessage(message.RequestId!, info.FileName, info.Size, info.Sha256, WorkspaceFileNames.FormatLocal(info.ChangedAt)),
             AcdJsonContext.Default.WordContentMessage,
             ct);
         await ws.SendAsync(content, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
@@ -136,11 +134,11 @@ public sealed class DocumentWorkspaceHandler
 
     public async Task<SessionState> OpenFolderAsync(NativeWebSocket ws, OpenFolderMessage message, CancellationToken ct)
     {
-        if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection))
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection))
             return await RejectAsync(ws, rejection!, ct);
 
         if (!Directory.Exists(directory))
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceFolderNotFound, "The remito folder does not exist", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFolderNotFound, "The remito folder does not exist", PolicyViolation), ct);
 
         try
         {
@@ -149,7 +147,7 @@ public sealed class DocumentWorkspaceHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "[{SessionId}] Windows no pudo abrir la carpeta del remito", _sessionId);
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.ProcessStartFailed, "Windows could not open the remito folder", InternalFailure), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.ProcessStartFailed, "Windows could not open the remito folder", InternalFailure), ct);
         }
 
         await WebSocketTransport.SendJsonAsync(ws, new FolderOpenedMessage(message.RequestId!), AcdJsonContext.Default.FolderOpenedMessage, ct);
@@ -165,7 +163,7 @@ public sealed class DocumentWorkspaceHandler
         }
         catch (WorkspaceFileExistsException)
         {
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceFileExists, "A Word document with that name already exists in the remito folder", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileExists, "A Word document with that name already exists in the remito folder", PolicyViolation), ct);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
@@ -176,7 +174,7 @@ public sealed class DocumentWorkspaceHandler
 
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new WordWrittenMessage(pending.RequestId, info.FileName, FormatLocal(info.ChangedAt), opened),
+            new WordWrittenMessage(pending.RequestId, info.FileName, WorkspaceFileNames.FormatLocal(info.ChangedAt), opened),
             AcdJsonContext.Default.WordWrittenMessage,
             ct);
         return await CompleteAsync(ws, MessageType.WordWritten, ct);
@@ -221,7 +219,7 @@ public sealed class DocumentWorkspaceHandler
         }
 
         if (pdf.LongLength > _options.MaxFileBytes)
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.InvalidFileSize, $"Converted PDF must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.InvalidFileSize, $"Converted PDF must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
 
         await WebSocketTransport.SendJsonAsync(
             ws,
@@ -232,11 +230,11 @@ public sealed class DocumentWorkspaceHandler
         return await CompleteAsync(ws, MessageType.PdfContent, ct);
     }
 
-    private static Rejection ConversionRejection(string code) => code switch
+    private static WorkspaceRejection ConversionRejection(string code) => code switch
     {
-        ErrorCatalog.WordNotInstalled => new Rejection(code, "Microsoft Word is not installed on this device", PolicyViolation),
-        ErrorCatalog.ConversionTimeout => new Rejection(code, "Word did not finish converting the document in time", InternalFailure),
-        _ => new Rejection(ErrorCatalog.ConversionFailed, "Word could not convert the document to PDF", InternalFailure)
+        ErrorCatalog.WordNotInstalled => new WorkspaceRejection(code, "Microsoft Word is not installed on this device", PolicyViolation),
+        ErrorCatalog.ConversionTimeout => new WorkspaceRejection(code, "Word did not finish converting the document in time", InternalFailure),
+        _ => new WorkspaceRejection(ErrorCatalog.ConversionFailed, "Word could not convert the document to PDF", InternalFailure)
     };
 
     private bool TryOpenWord(string path)
@@ -253,44 +251,20 @@ public sealed class DocumentWorkspaceHandler
         }
     }
 
-    private bool TryResolveRemito(string? requestId, string? anio, string? numeroEmision, out string directory, out Rejection? rejection)
-    {
-        directory = string.Empty;
-        if (!TryValidateRequestId(requestId, out rejection))
-            return false;
-
-        if (!_paths.TryGetRemitoDirectory(anio!, numeroEmision!, out directory))
-        {
-            rejection = new Rejection(ErrorCatalog.WorkspaceInvalidKey, "anio must have 4 digits and numeroEmision 1 to 10 digits", PolicyViolation);
-            return false;
-        }
-
-        rejection = null;
-        return true;
-    }
-
-    private static bool TryValidateRequestId(string? requestId, out Rejection? rejection)
-    {
-        rejection = Guid.TryParse(requestId, out _)
-            ? null
-            : new Rejection(ErrorCatalog.InvalidRequestId, "requestId must be a valid UUID", PolicyViolation);
-        return rejection is null;
-    }
-
-    private static bool TryValidateWordName(string? fileName, out Rejection? rejection)
+    private static bool TryValidateWordName(string? fileName, out WorkspaceRejection? rejection)
     {
         rejection = fileName is not null && WorkspaceFileNames.IsValidFileName(fileName, WordExtension)
             ? null
-            : new Rejection(ErrorCatalog.WorkspaceInvalidFilename, "filename must be a safe .docx file name", PolicyViolation);
+            : new WorkspaceRejection(ErrorCatalog.WorkspaceInvalidFilename, "filename must be a safe .docx file name", PolicyViolation);
         return rejection is null;
     }
 
-    private bool TryValidateDeclaredContent(long size, string? sha256, out Rejection? rejection)
+    private bool TryValidateDeclaredContent(long size, string? sha256, out WorkspaceRejection? rejection)
     {
         if (size <= 0 || size > _options.MaxFileBytes)
-            rejection = new Rejection(ErrorCatalog.InvalidFileSize, $"Document size must be between 1 and {_options.MaxFileBytes} bytes", PolicyViolation);
+            rejection = new WorkspaceRejection(ErrorCatalog.InvalidFileSize, $"Document size must be between 1 and {_options.MaxFileBytes} bytes", PolicyViolation);
         else if (sha256 is not { Length: 64 } || !sha256.All(Uri.IsHexDigit))
-            rejection = new Rejection(ErrorCatalog.WorkspaceIntegrity, "sha256 must contain 64 hexadecimal characters", PolicyViolation);
+            rejection = new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "sha256 must contain 64 hexadecimal characters", PolicyViolation);
         else
             rejection = null;
         return rejection is null;
@@ -303,10 +277,10 @@ public sealed class DocumentWorkspaceHandler
     private async Task<SessionState> RejectIoAsync(NativeWebSocket ws, Exception ex, string message, CancellationToken ct)
     {
         _logger.LogError(ex, "[{SessionId}] Fallo de E/S en la carpeta del remito", _sessionId);
-        return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceIoFailed, message, InternalFailure), ct);
+        return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIoFailed, message, InternalFailure), ct);
     }
 
-    private async Task<SessionState> RejectAsync(NativeWebSocket ws, Rejection rejection, CancellationToken ct)
+    private async Task<SessionState> RejectAsync(NativeWebSocket ws, WorkspaceRejection rejection, CancellationToken ct)
     {
         await WebSocketTransport.SendErrorAndCloseAsync(ws, rejection.Code, rejection.Message, rejection.CloseCode, _logger, _sessionId, ct);
         return SessionState.Closed;
@@ -319,9 +293,6 @@ public sealed class DocumentWorkspaceHandler
         return SessionState.Closed;
     }
 
-    private static string FormatLocal(DateTime value) =>
-        value.ToString(LocalDateTimeFormat, CultureInfo.InvariantCulture);
-
     private enum PendingKind
     {
         Word,
@@ -330,6 +301,4 @@ public sealed class DocumentWorkspaceHandler
     }
 
     private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open);
-
-    private sealed record Rejection(string Code, string Message, int CloseCode);
 }

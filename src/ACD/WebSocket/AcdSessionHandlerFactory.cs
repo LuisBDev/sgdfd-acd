@@ -19,6 +19,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
     private readonly PdfOpenStorage _pdfOpenStorage;
     private readonly ISessionGate _sessionGate;
     private readonly WorkspaceFileStore _workspaceFileStore;
+    private readonly IWorkspaceWatcherFactory _workspaceWatcherFactory;
     private readonly WorkspacePaths _workspacePaths;
 
     public AcdSessionHandlerFactory(
@@ -29,6 +30,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         WorkspacePaths workspacePaths,
         WorkspaceFileStore workspaceFileStore,
         IConversionService conversionService,
+        IWorkspaceWatcherFactory workspaceWatcherFactory,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
@@ -39,6 +41,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _workspacePaths = workspacePaths;
         _workspaceFileStore = workspaceFileStore;
         _conversionService = conversionService;
+        _workspaceWatcherFactory = workspaceWatcherFactory;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
@@ -75,6 +78,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentWorkspaceHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
+        var workspaceWatchSession = new WorkspaceWatchSession(_workspaceWatcherFactory, _workspacePaths, logger, sessionId);
+
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentWorkspaceHandler, workspaceWatchSession, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

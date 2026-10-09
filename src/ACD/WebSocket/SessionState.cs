@@ -9,6 +9,7 @@ public enum SessionState
     ReceivingPdfToOpen,
     ReceivingWorkspaceFile,
     WatchingFirma,
+    WatchingWorkspace,
     SendingFile,
     Closed
 }
