@@ -24,14 +24,27 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
         if (!Directory.Exists(directory))
             return new WorkspaceStatus(false, null);
 
+        try
+        {
+            return new WorkspaceStatus(true, DescribeLatestWord(directory));
+        }
+        catch (FileNotFoundException)
+        {
+            return new WorkspaceStatus(true, DescribeLatestWord(directory));
+        }
+    }
+
+    private static WordFileInfo? DescribeLatestWord(string directory)
+    {
         var latestWord = WorkspaceFileNames.FindLatestWord(directory);
         if (latestWord is null)
-            return new WorkspaceStatus(true, null);
+            return null;
 
         using var stream = OpenShared(latestWord);
         var size = stream.Length;
+        var lastWriteTime = File.GetLastWriteTime(stream.SafeFileHandle);
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-        return new WorkspaceStatus(true, new WordFileInfo(Path.GetFileName(latestWord), File.GetLastWriteTime(latestWord), size, sha256));
+        return new WordFileInfo(Path.GetFileName(latestWord), lastWriteTime, size, sha256);
     }
 
     public async Task<WordFileInfo> WriteWordAsync(string directory, string fileName, byte[] content, CancellationToken ct)

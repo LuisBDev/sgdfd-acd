@@ -2,7 +2,8 @@ namespace ACD.WebSocket;
 
 /// <summary>
 ///     Coordinador thread-safe que mantiene exclusividad por tipo de operación.
-///     Permite una firma, una apertura PDF y una edición de documento en paralelo, pero nunca dos operaciones
+///     Permite una firma, una apertura PDF, una edición de documento, un comando del workspace y una conversión a PDF
+///     en paralelo, pero nunca dos operaciones
 ///     simultáneas del mismo tipo.
 /// </summary>
 public sealed class SessionGate : ISessionGate
