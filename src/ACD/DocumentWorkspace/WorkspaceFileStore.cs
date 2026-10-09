@@ -9,7 +9,10 @@ public sealed record WorkspaceStatus(bool FolderExists, WordFileInfo? LatestWord
 public sealed class WorkspaceFileExistsException(string fileName)
     : IOException($"The file {fileName} already exists in the remito folder");
 
-public sealed class WorkspaceFileStore
+public sealed class WorkspaceFileTooLargeException(string fileName, long maxFileBytes)
+    : IOException($"The file {fileName} exceeds the {maxFileBytes} bytes limit");
+
+public sealed class WorkspaceFileStore(long maxFileBytes)
 {
     private const int FileExistsHResult = unchecked((int)0x80070050);
     private const int SharingViolationHResult = unchecked((int)0x80070020);
@@ -25,8 +28,10 @@ public sealed class WorkspaceFileStore
         if (latestWord is null)
             return new WorkspaceStatus(true, null);
 
-        var content = ReadShared(latestWord);
-        return new WorkspaceStatus(true, Describe(latestWord, content));
+        using var stream = OpenShared(latestWord);
+        var size = stream.Length;
+        var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
+        return new WorkspaceStatus(true, new WordFileInfo(Path.GetFileName(latestWord), File.GetLastWriteTime(latestWord), size, sha256));
     }
 
     public async Task<WordFileInfo> WriteWordAsync(string directory, string fileName, byte[] content, CancellationToken ct)
@@ -61,7 +66,10 @@ public sealed class WorkspaceFileStore
     public async Task<(WordFileInfo Info, byte[] Content)> ReadWordAsync(string directory, string fileName, CancellationToken ct)
     {
         var path = Path.Combine(directory, fileName);
-        await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, ReadWhileOpenInWord);
+        await using var stream = OpenShared(path);
+        if (stream.Length > maxFileBytes)
+            throw new WorkspaceFileTooLargeException(fileName, maxFileBytes);
+
         var content = new byte[stream.Length];
         await stream.ReadExactlyAsync(content, ct).ConfigureAwait(false);
         return (Describe(path, content), content);
@@ -90,13 +98,8 @@ public sealed class WorkspaceFileStore
         await stream.WriteAsync(content, ct).ConfigureAwait(false);
     }
 
-    private static byte[] ReadShared(string path)
-    {
-        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, ReadWhileOpenInWord);
-        var content = new byte[stream.Length];
-        stream.ReadExactly(content);
-        return content;
-    }
+    private static FileStream OpenShared(string path) =>
+        new(path, FileMode.Open, FileAccess.Read, ReadWhileOpenInWord);
 
     private static WordFileInfo Describe(string path, byte[] content) =>
         new(

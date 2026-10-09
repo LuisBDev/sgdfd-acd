@@ -6,7 +6,8 @@ namespace ACD.Tests.DocumentWorkspace;
 public sealed class WorkspaceFileStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "acd-tests-" + Guid.NewGuid().ToString("N"));
-    private readonly WorkspaceFileStore _store = new();
+    private const long MaxFileBytes = 16;
+    private readonly WorkspaceFileStore _store = new(MaxFileBytes);
 
     private string RemitoDirectory => Path.Combine(_root, "2026", "0000121972");
 
@@ -78,6 +79,16 @@ public sealed class WorkspaceFileStoreTests : IDisposable
 
         Assert.Equal(("OFICIO.pdf", false), overwritten);
         Assert.Equal(pdf, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.pdf")));
+    }
+
+    [Fact]
+    public async Task ReadWord_conArchivoMayorAlLimite_rechazaSinLeer()
+    {
+        Directory.CreateDirectory(RemitoDirectory);
+        CreateFile("OFICIO.docx", new byte[MaxFileBytes + 1], DateTime.Now);
+
+        await Assert.ThrowsAsync<WorkspaceFileTooLargeException>(
+            () => _store.ReadWordAsync(RemitoDirectory, "OFICIO.docx", CancellationToken.None));
     }
 
     private void CreateFile(string name, byte[] content, DateTime lastWriteTime)

@@ -124,7 +124,8 @@ builder.Services.AddSingleton(sp => new DocumentEditStorage(
     sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
 builder.Services.AddSingleton(sp => new WorkspacePaths(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit));
-builder.Services.AddSingleton<WorkspaceFileStore>();
+builder.Services.AddSingleton(sp => new WorkspaceFileStore(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.MaxFileBytes));
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());

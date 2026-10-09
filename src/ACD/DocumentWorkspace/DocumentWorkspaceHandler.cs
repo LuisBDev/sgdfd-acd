@@ -125,13 +125,14 @@ public sealed class DocumentWorkspaceHandler
         {
             return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceFileNotFound, "The Word document does not exist in the remito folder", PolicyViolation), ct);
         }
+        catch (WorkspaceFileTooLargeException)
+        {
+            return await RejectAsync(ws, new Rejection(ErrorCatalog.InvalidFileSize, $"Document size must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
+        }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             return await RejectIoAsync(ws, ex, "Could not read the Word document", ct);
         }
-
-        if (info.Size > _options.MaxFileBytes)
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.InvalidFileSize, $"Document size must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
 
         await WebSocketTransport.SendJsonAsync(
             ws,
@@ -180,12 +181,11 @@ public sealed class DocumentWorkspaceHandler
             return await RejectIoAsync(ws, ex, "Could not write the Word document", ct);
         }
 
-        if (pending.Open && !TryOpenWord(Path.Combine(pending.Directory, info.FileName)))
-            return await RejectAsync(ws, new Rejection(ErrorCatalog.EditLaunchFailed, "The Word document was saved but Windows could not open it", InternalFailure), ct);
+        var opened = pending.Open && TryOpenWord(Path.Combine(pending.Directory, info.FileName));
 
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new WordWrittenMessage(pending.RequestId, info.FileName, FormatLocal(info.LastWriteTime)),
+            new WordWrittenMessage(pending.RequestId, info.FileName, FormatLocal(info.LastWriteTime), opened),
             AcdJsonContext.Default.WordWrittenMessage,
             ct);
         return await CompleteAsync(ws, MessageType.WordWritten, ct);

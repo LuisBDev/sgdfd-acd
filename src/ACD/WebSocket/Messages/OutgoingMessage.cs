@@ -145,7 +145,8 @@ public sealed record WordWrittenMessage(
     [property: JsonPropertyName("filename")]
     string Filename,
     [property: JsonPropertyName("lastWriteTime")]
-    string LastWriteTime)
+    string LastWriteTime,
+    [property: JsonPropertyName("opened")] bool Opened)
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordWritten;
 }
