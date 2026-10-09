@@ -5,7 +5,8 @@ public enum SessionOperation
     Signing,
     PdfOpen,
     DocumentEdit,
-    Workspace
+    Workspace,
+    Conversion
 }
 
 public interface ISessionGate
@@ -15,6 +16,7 @@ public interface ISessionGate
     bool IsPdfOpenActive { get; }
     bool IsDocumentEditActive { get; }
     bool IsWorkspaceActive { get; }
+    bool IsConversionActive { get; }
     Task<bool> TryAcquireConnectionAsync(CancellationToken ct);
     void ReleaseConnection();
     Task<bool> TryAcquireAsync(SessionOperation operation, CancellationToken ct);

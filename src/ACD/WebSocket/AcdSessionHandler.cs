@@ -250,7 +250,7 @@ public sealed class AcdSessionHandler
             case (SessionState.Authenticated, MessageType.ConvertToPdf):
                 var convertMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.ConvertToPdfMessage);
                 if (convertMsg is null) break;
-                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Workspace, ct)) return;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Conversion, ct)) return;
                 _state = await _documentWorkspaceHandler.PrepareConvertToPdfAsync(webSocket, convertMsg, ct);
                 break;
 
@@ -341,6 +341,7 @@ public sealed class AcdSessionHandler
                     SessionOperation.Signing => "Another signing operation is already active",
                     SessionOperation.DocumentEdit => "Another document edit operation is already active",
                     SessionOperation.Workspace => "Another document workspace operation is already active",
+                    SessionOperation.Conversion => "Another Word to PDF conversion is already active",
                     _ => "Another PDF opening operation is already active"
                 },
                 4002,

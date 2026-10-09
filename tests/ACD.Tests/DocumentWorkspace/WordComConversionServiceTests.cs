@@ -10,7 +10,9 @@ public sealed class WordComConversionServiceTests : IDisposable
 {
     private const int UserWordPid = 100;
     private const int CreatedWordPid = 200;
+    private const int UserWordOpenedDuringConversionPid = 300;
     private static readonly byte[] Docx = [80, 75, 3, 4];
+    private static readonly TimeSpan BoundedWait = TimeSpan.FromSeconds(10);
 
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), "acd-conv-tests-" + Guid.NewGuid().ToString("N"));
     private readonly FakeWordProcesses _processes = new(UserWordPid);
@@ -28,15 +30,16 @@ public sealed class WordComConversionServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task conversionQueNoTermina_lanzaCONVERSION_TIMEOUT_yMataElProcesoCreado()
+    public async Task conversionQueNoTermina_lanzaCONVERSION_TIMEOUT_yMataSoloElProcesoDeAutomatizacionCreado()
     {
         var killed = new ManualResetEventSlim();
         _processes.OnKill = _ => killed.Set();
         var service = CreateService(
             () =>
             {
-                _processes.Start(CreatedWordPid);
-                return new FakeWord(new FakeDocuments(_ => killed.Wait()));
+                _processes.Start(CreatedWordPid, automation: true);
+                _processes.Start(UserWordOpenedDuringConversionPid, automation: false);
+                return new FakeWord(new FakeDocuments(_ => killed.Wait(BoundedWait)), () => { });
             },
             TimeSpan.FromSeconds(1));
 
@@ -49,10 +52,49 @@ public sealed class WordComConversionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task sinProcesoDeAutomatizacionNuevo_noTocaElWordYLanzaCONVERSION_FAILED()
+    {
+        var word = new FakeWord(new FakeDocuments(_ => { }), () => { });
+        var service = CreateService(
+            () =>
+            {
+                _processes.Start(UserWordOpenedDuringConversionPid, automation: false);
+                return word;
+            },
+            TimeSpan.FromSeconds(5));
+
+        var error = await Assert.ThrowsAsync<ConversionException>(
+            () => service.ConvertDocxToPdfAsync(Docx, CancellationToken.None));
+
+        Assert.Equal(ErrorCatalog.ConversionFailed, error.Code);
+        Assert.True(word.Visible);
+        Assert.False(word.QuitCalled);
+        Assert.Empty(_processes.Killed);
+    }
+
+    [Fact]
+    public async Task conversionExitosaConWordQueNoTermina_mataElProcesoCreado()
+    {
+        var service = CreateService(
+            () =>
+            {
+                _processes.Start(CreatedWordPid, automation: true);
+                return new FakeWord(new FakeDocuments(_ => { }), () => { });
+            },
+            TimeSpan.FromSeconds(5));
+
+        var pdf = await service.ConvertDocxToPdfAsync(Docx, CancellationToken.None);
+
+        Assert.StartsWith("%PDF", Encoding.ASCII.GetString(pdf));
+        Assert.Equal([CreatedWordPid], _processes.Killed);
+    }
+
+    [Fact]
     public async Task conversionesConcurrentes_seSerializan()
     {
         var running = 0;
         var maxRunning = 0;
+        var nextPid = CreatedWordPid;
         var documents = new FakeDocuments(_ =>
         {
             var now = Interlocked.Increment(ref running);
@@ -60,7 +102,14 @@ public sealed class WordComConversionServiceTests : IDisposable
             Thread.Sleep(150);
             Interlocked.Decrement(ref running);
         });
-        var service = CreateService(() => new FakeWord(documents), TimeSpan.FromSeconds(10));
+        var service = CreateService(
+            () =>
+            {
+                var pid = Interlocked.Increment(ref nextPid);
+                _processes.Start(pid, automation: true);
+                return new FakeWord(documents, () => _processes.Exit(pid));
+            },
+            TimeSpan.FromSeconds(10));
 
         var results = await Task.WhenAll(
             service.ConvertDocxToPdfAsync(Docx, CancellationToken.None),
@@ -68,6 +117,7 @@ public sealed class WordComConversionServiceTests : IDisposable
 
         Assert.Equal(1, maxRunning);
         Assert.All(results, pdf => Assert.StartsWith("%PDF", Encoding.ASCII.GetString(pdf)));
+        Assert.Empty(_processes.Killed);
         Assert.Empty(Directory.EnumerateFileSystemEntries(_tempRoot));
     }
 
@@ -78,7 +128,11 @@ public sealed class WordComConversionServiceTests : IDisposable
     }
 
     private WordComConversionService CreateService(Func<object?> wordFactory, TimeSpan timeout) =>
-        new(wordFactory, _processes.CurrentIds, _processes, timeout, _tempRoot, NullLogger<WordComConversionService>.Instance);
+        new(
+            wordFactory,
+            _processes,
+            new WordConversionSettings(timeout, TimeSpan.FromMilliseconds(300), _tempRoot),
+            NullLogger<WordComConversionService>.Instance);
 
     private static void InterlockedMax(ref int target, int value)
     {
@@ -87,18 +141,24 @@ public sealed class WordComConversionServiceTests : IDisposable
             Interlocked.CompareExchange(ref target, value, current);
     }
 
-    public sealed class FakeWordProcesses(params int[] initial) : IProcessKiller
+    public sealed class FakeWordProcesses : IWordProcesses
     {
-        private readonly ConcurrentDictionary<int, byte> _running = new(initial.Select(pid => KeyValuePair.Create(pid, (byte)0)));
+        private readonly ConcurrentDictionary<int, bool> _running = new();
         private readonly ConcurrentQueue<int> _killed = new();
+
+        public FakeWordProcesses(int userPid) => _running[userPid] = false;
 
         public Action<int> OnKill { get; set; } = _ => { };
 
         public IReadOnlyCollection<int> Killed => _killed.ToArray();
 
-        public void Start(int pid) => _running[pid] = 0;
+        public void Start(int pid, bool automation) => _running[pid] = automation;
+
+        public void Exit(int pid) => _running.TryRemove(pid, out _);
 
         public IReadOnlySet<int> CurrentIds() => _running.Keys.ToHashSet();
+
+        public bool IsAutomationInstance(int processId) => _running.TryGetValue(processId, out var automation) && automation;
 
         public void Kill(int processId)
         {
@@ -108,14 +168,17 @@ public sealed class WordComConversionServiceTests : IDisposable
         }
     }
 
-    public sealed class FakeWord(FakeDocuments documents)
+    public sealed class FakeWord(FakeDocuments documents, Action onQuit)
     {
         public bool Visible { get; set; } = true;
         public int DisplayAlerts { get; set; } = -1;
+        public bool QuitCalled { get; private set; }
         public FakeDocuments Documents { get; } = documents;
 
         public void Quit(int saveChanges)
         {
+            QuitCalled = true;
+            onQuit();
         }
     }
 

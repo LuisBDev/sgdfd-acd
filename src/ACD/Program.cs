@@ -132,10 +132,11 @@ builder.Services.AddSingleton<IConversionService>(sp =>
     var wordProcesses = sp.GetRequiredService<WinWordProcesses>();
     return new WordComConversionService(
         WordComConversionService.CreateWordApplication,
-        wordProcesses.CurrentIds,
         wordProcesses,
-        TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.ConversionTimeoutSeconds),
-        Path.Combine(Path.GetTempPath(), "acd-conv"),
+        new WordConversionSettings(
+            sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.GetConversionTimeout(),
+            TimeSpan.FromSeconds(5),
+            Path.Combine(Path.GetTempPath(), "acd-conv")),
         sp.GetRequiredService<ILogger<WordComConversionService>>());
 });
 

@@ -13,29 +13,27 @@ public sealed class WordComConversionService : IConversionService, IDisposable
     private const int DoNotSaveChanges = 0;
     private const int NoAlerts = 0;
     private static readonly byte[] PdfSignature = Encoding.ASCII.GetBytes("%PDF");
-    private static readonly TimeSpan KillGracePeriod = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan ExitPollInterval = TimeSpan.FromMilliseconds(100);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly IProcessKiller _killer;
+    private readonly IWordProcesses _processes;
+    private readonly TimeSpan _exitGracePeriod;
     private readonly ILogger<WordComConversionService> _logger;
     private readonly string _tempRoot;
     private readonly TimeSpan _timeout;
     private readonly Func<object?> _wordFactory;
-    private readonly Func<IReadOnlySet<int>> _wordProcessIds;
 
     public WordComConversionService(
         Func<object?> wordFactory,
-        Func<IReadOnlySet<int>> wordProcessIds,
-        IProcessKiller killer,
-        TimeSpan timeout,
-        string tempRoot,
+        IWordProcesses processes,
+        WordConversionSettings settings,
         ILogger<WordComConversionService> logger)
     {
         _wordFactory = wordFactory;
-        _wordProcessIds = wordProcessIds;
-        _killer = killer;
-        _timeout = timeout;
-        _tempRoot = tempRoot;
+        _processes = processes;
+        _timeout = settings.Timeout;
+        _exitGracePeriod = settings.ExitGracePeriod;
+        _tempRoot = settings.TempRoot;
         _logger = logger;
     }
 
@@ -53,9 +51,10 @@ public sealed class WordComConversionService : IConversionService, IDisposable
             var output = Path.Combine(folder, OutputFileName);
             await File.WriteAllBytesAsync(input, docx, ct).ConfigureAwait(false);
 
-            var processes = new CreatedWordProcesses(_wordProcessIds());
+            var processes = new CreatedWordProcesses(_processes.CurrentIds());
             var conversion = StaWorker.RunAsync("acd-word-conversion", () => Convert(input, output, processes));
             await WaitForConversionAsync(conversion, processes, ct).ConfigureAwait(false);
+            await EnsureCreatedWordExitedAsync(processes).ConfigureAwait(false);
             return await ReadPdfAsync(output, ct).ConfigureAwait(false);
         }
         finally
@@ -77,7 +76,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
         {
             _logger.LogWarning("La conversión de Word a PDF superó {Timeout}; se cierra el Word creado", _timeout);
             KillCreatedWord(processes);
-            await Task.WhenAny(conversion, Task.Delay(KillGracePeriod, CancellationToken.None)).ConfigureAwait(false);
+            await Task.WhenAny(conversion, Task.Delay(_exitGracePeriod, CancellationToken.None)).ConfigureAwait(false);
             ObserveFault(conversion);
             ct.ThrowIfCancellationRequested();
             throw new ConversionException(ErrorCatalog.ConversionTimeout);
@@ -90,7 +89,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
         catch (ConversionException ex) when (ex.Code == ErrorCatalog.ConversionFailed)
         {
             _logger.LogError(ex.InnerException, "Word no pudo convertir el documento a PDF");
-            KillCreatedWord(processes);
+            await EnsureCreatedWordExitedAsync(processes).ConfigureAwait(false);
             throw;
         }
     }
@@ -99,10 +98,17 @@ public sealed class WordComConversionService : IConversionService, IDisposable
     {
         object? application = null;
         dynamic? document = null;
+        var owned = false;
         try
         {
             application = _wordFactory() ?? throw new ConversionException(ErrorCatalog.WordNotInstalled);
-            processes.Record(_wordProcessIds());
+            owned = processes.Record(NewAutomationProcesses(processes.Before));
+            if (!owned)
+            {
+                _logger.LogWarning("No se identificó el proceso de Word creado para la conversión; no se usará esa instancia");
+                throw new ConversionException(ErrorCatalog.ConversionFailed);
+            }
+
             dynamic word = application;
             word.Visible = false;
             word.DisplayAlerts = NoAlerts;
@@ -116,17 +122,47 @@ public sealed class WordComConversionService : IConversionService, IDisposable
         finally
         {
             CloseQuietly(document);
-            QuitQuietly(application);
+            if (owned)
+                QuitQuietly(application);
             ReleaseQuietly(document);
             ReleaseQuietly(application);
         }
     }
 
+    private IReadOnlySet<int> NewAutomationProcesses(IReadOnlySet<int> before) =>
+        _processes.CurrentIds()
+            .Except(before)
+            .Where(_processes.IsAutomationInstance)
+            .ToHashSet();
+
     private void KillCreatedWord(CreatedWordProcesses processes)
     {
-        foreach (var processId in processes.Created(_wordProcessIds()))
-            _killer.Kill(processId);
+        foreach (var processId in processes.Recorded ?? NewAutomationProcesses(processes.Before))
+            _processes.Kill(processId);
     }
+
+    private async Task EnsureCreatedWordExitedAsync(CreatedWordProcesses processes)
+    {
+        if (processes.Recorded is not { Count: > 0 } created)
+            return;
+
+        var deadline = DateTime.UtcNow + _exitGracePeriod;
+        var remaining = StillRunning(created);
+        while (remaining.Count > 0 && DateTime.UtcNow < deadline)
+        {
+            await Task.Delay(ExitPollInterval, CancellationToken.None).ConfigureAwait(false);
+            remaining = StillRunning(created);
+        }
+
+        foreach (var processId in remaining)
+        {
+            _logger.LogWarning("El Word {ProcessId} creado para la conversión no terminó; se cierra", processId);
+            _processes.Kill(processId);
+        }
+    }
+
+    private IReadOnlySet<int> StillRunning(IReadOnlySet<int> created) =>
+        created.Intersect(_processes.CurrentIds()).ToHashSet();
 
     private static async Task<byte[]> ReadPdfAsync(string output, CancellationToken ct)
     {
@@ -187,19 +223,16 @@ public sealed class WordComConversionService : IConversionService, IDisposable
 
     private sealed class CreatedWordProcesses(IReadOnlySet<int> before)
     {
-        private readonly Lock _lock = new();
-        private IReadOnlySet<int>? _created;
+        private volatile IReadOnlySet<int>? _recorded;
 
-        public void Record(IReadOnlySet<int> after)
-        {
-            lock (_lock)
-                _created = after.Except(before).ToHashSet();
-        }
+        public IReadOnlySet<int> Before { get; } = before;
 
-        public IReadOnlySet<int> Created(IReadOnlySet<int> current)
+        public IReadOnlySet<int>? Recorded => _recorded;
+
+        public bool Record(IReadOnlySet<int> created)
         {
-            lock (_lock)
-                return _created ?? current.Except(before).ToHashSet();
+            _recorded = created;
+            return created.Count > 0;
         }
     }
 }

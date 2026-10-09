@@ -2,6 +2,7 @@ namespace ACD.Configuration;
 
 public sealed class DocumentEditOptions
 {
+    private const int DefaultConversionTimeoutSeconds = 90;
     private static readonly string[] DefaultAllowedExtensions = [".docx"];
 
     public string RootDirectory { get; init; } = string.Empty;
@@ -10,7 +11,10 @@ public sealed class DocumentEditOptions
     public int TimeoutMinutes { get; init; } = 60;
     public int PdfDebounceMilliseconds { get; init; } = 1500;
     public int PdfStabilizationTimeoutSeconds { get; init; } = 30;
-    public int ConversionTimeoutSeconds { get; init; } = 90;
+    public int ConversionTimeoutSeconds { get; init; } = DefaultConversionTimeoutSeconds;
+
+    public TimeSpan GetConversionTimeout() =>
+        TimeSpan.FromSeconds(ConversionTimeoutSeconds > 0 ? ConversionTimeoutSeconds : DefaultConversionTimeoutSeconds);
 
     public string GetRootDirectory() =>
         string.IsNullOrWhiteSpace(RootDirectory)
