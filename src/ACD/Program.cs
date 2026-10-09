@@ -1,6 +1,7 @@
 using System.Reflection;
 using ACD.Configuration;
 using ACD.DocumentEdit;
+using ACD.DocumentWorkspace;
 using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
@@ -121,6 +122,9 @@ builder.Services.AddSingleton(sp => new DocumentEditStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
     TimeProvider.System,
     sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
+builder.Services.AddSingleton(sp => new WorkspacePaths(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit));
+builder.Services.AddSingleton<WorkspaceFileStore>();
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());

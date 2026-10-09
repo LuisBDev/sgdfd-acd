@@ -119,3 +119,64 @@ public sealed record EditTimeoutMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditTimeout;
 }
+
+public sealed record LatestWordPayload(
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("lastWriteTime")]
+    string LastWriteTime,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256);
+
+public sealed record WorkspaceStatusResultMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("folderExists")]
+    bool FolderExists,
+    [property: JsonPropertyName("latestWord")]
+    LatestWordPayload? LatestWord)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceStatusResult;
+}
+
+public sealed record WordWrittenMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("lastWriteTime")]
+    string LastWriteTime)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordWritten;
+}
+
+public sealed record WordContentMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256,
+    [property: JsonPropertyName("lastWriteTime")]
+    string LastWriteTime)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordContent;
+}
+
+public sealed record PdfCopyWrittenMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("renamed")]
+    bool Renamed)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfCopyWritten;
+}
+
+public sealed record FolderOpenedMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.FolderOpened;
+}

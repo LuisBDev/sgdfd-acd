@@ -1,5 +1,6 @@
 using ACD.Configuration;
 using ACD.DocumentEdit;
+using ACD.DocumentWorkspace;
 using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
@@ -19,6 +20,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
     private readonly IShellLauncher _shellLauncher;
     private readonly PdfOpenStorage _pdfOpenStorage;
     private readonly ISessionGate _sessionGate;
+    private readonly WorkspaceFileStore _workspaceFileStore;
+    private readonly WorkspacePaths _workspacePaths;
 
     public AcdSessionHandlerFactory(
         IOptions<AcdOptions> options,
@@ -27,6 +30,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         PdfOpenStorage pdfOpenStorage,
         DocumentEditStorage documentEditStorage,
         IEditedPdfWatcherFactory editedPdfWatcherFactory,
+        WorkspacePaths workspacePaths,
+        WorkspaceFileStore workspaceFileStore,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
@@ -36,6 +41,8 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _pdfOpenStorage = pdfOpenStorage;
         _documentEditStorage = documentEditStorage;
         _editedPdfWatcherFactory = editedPdfWatcherFactory;
+        _workspacePaths = workspacePaths;
+        _workspaceFileStore = workspaceFileStore;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
@@ -71,6 +78,14 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             logger,
             sessionId);
 
-        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentEditHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
+        var documentWorkspaceHandler = new DocumentWorkspaceHandler(
+            _options.DocumentEdit,
+            _workspacePaths,
+            _workspaceFileStore,
+            _shellLauncher,
+            logger,
+            sessionId);
+
+        return new AcdSessionHandler(firmaHandler, pdfOpenHandler, documentEditHandler, documentWorkspaceHandler, _sessionGate, logger, sessionId, _options.WatchDirectory);
     }
 }

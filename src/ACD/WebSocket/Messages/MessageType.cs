@@ -10,6 +10,11 @@ public static class MessageType
     public const string EditDocument = "EDIT_DOCUMENT";
     public const string RequestEditedPdf = "REQUEST_EDITED_PDF";
     public const string CancelEdit = "CANCEL_EDIT";
+    public const string WorkspaceStatus = "WORKSPACE_STATUS";
+    public const string WriteWord = "WRITE_WORD";
+    public const string ReadWord = "READ_WORD";
+    public const string WritePdfCopy = "WRITE_PDF_COPY";
+    public const string OpenFolder = "OPEN_FOLDER";
 
     // Outgoing (ACD → MFD)
     public const string AuthOk = "AUTH_OK";
@@ -24,5 +29,10 @@ public static class MessageType
     public const string EditedPdf = "EDITED_PDF";
     public const string EditedPdfUnavailable = "EDITED_PDF_UNAVAILABLE";
     public const string EditTimeout = "EDIT_TIMEOUT";
+    public const string WorkspaceStatusResult = "WORKSPACE_STATUS_RESULT";
+    public const string WordWritten = "WORD_WRITTEN";
+    public const string WordContent = "WORD_CONTENT";
+    public const string PdfCopyWritten = "PDF_COPY_WRITTEN";
+    public const string FolderOpened = "FOLDER_OPENED";
     public const string Error = "ERROR";
 }

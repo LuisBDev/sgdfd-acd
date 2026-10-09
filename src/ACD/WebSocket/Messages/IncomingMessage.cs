@@ -54,3 +54,41 @@ public sealed record RequestEditedPdfMessage(
 public sealed record CancelEditMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId);
+
+public sealed record WorkspaceStatusMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
+
+public sealed record WriteWordMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256,
+    [property: JsonPropertyName("open")] bool Open);
+
+public sealed record ReadWordMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("filename")] string? Filename);
+
+public sealed record WritePdfCopyMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("wordFilename")] string? WordFilename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256);
+
+public sealed record OpenFolderMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
