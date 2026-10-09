@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using ACD.Configuration;
+using ACD.Files;
 using ACD.WebSocket.Messages;
 
 namespace ACD.DocumentEdit;
@@ -25,12 +26,7 @@ public static class DocumentEditRequestValidator
             return Fail(ErrorCatalog.InvalidFileSize, $"Document size must be between 1 and {options.MaxFileBytes} bytes", out errorCode, out errorMessage);
 
         var safeFilename = filename?.Trim() ?? string.Empty;
-        if (safeFilename.Length is 0 or > 180
-            || !string.Equals(safeFilename, Path.GetFileName(safeFilename), StringComparison.Ordinal)
-            || !IsAllowedExtension(Path.GetExtension(safeFilename), options)
-            || Path.GetFileNameWithoutExtension(safeFilename).Trim().Length == 0
-            || safeFilename.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0
-            || safeFilename.Contains("..", StringComparison.Ordinal))
+        if (!SafeFileName.IsValid(safeFilename, extension => IsAllowedExtension(extension, options)))
             return Fail(ErrorCatalog.InvalidFilename, "filename must be a safe document file name with an allowed extension", out errorCode, out errorMessage);
 
         var hash = sha256?.Trim() ?? string.Empty;
