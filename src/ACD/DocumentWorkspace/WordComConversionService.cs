@@ -12,6 +12,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
     private const int PdfExportFormat = 17;
     private const int DoNotSaveChanges = 0;
     private const int NoAlerts = 0;
+    private const int ForceDisableMacros = 3;
     private static readonly byte[] PdfSignature = Encoding.ASCII.GetBytes("%PDF");
     private static readonly TimeSpan ExitPollInterval = TimeSpan.FromMilliseconds(100);
 
@@ -110,6 +111,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
             }
 
             dynamic word = application;
+            word.AutomationSecurity = ForceDisableMacros;
             word.Visible = false;
             word.DisplayAlerts = NoAlerts;
             document = word.Documents.Open(FileName: input, ConfirmConversions: false, ReadOnly: true, AddToRecentFiles: false);
@@ -123,7 +125,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
         {
             CloseQuietly(document);
             if (owned)
-                QuitQuietly(application);
+                QuitOrHandOver(application, processes);
             ReleaseQuietly(document);
             ReleaseQuietly(application);
         }
@@ -187,15 +189,47 @@ public sealed class WordComConversionService : IConversionService, IDisposable
         }
     }
 
-    private static void QuitQuietly(object? application)
+    private void QuitOrHandOver(object? application, CreatedWordProcesses processes)
     {
         if (application is null) return;
+        if (HoldsOtherDocuments(application) && TryShow(application))
+        {
+            _logger.LogWarning("El Word creado para la conversión tiene documentos del usuario abiertos; se deja visible en lugar de cerrarlo");
+            processes.HandOver();
+            return;
+        }
+
         try
         {
             ((dynamic)application).Quit(DoNotSaveChanges);
         }
         catch (Exception)
         {
+        }
+    }
+
+    private static bool HoldsOtherDocuments(object application)
+    {
+        try
+        {
+            return (int)((dynamic)application).Documents.Count > 0;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
+    private static bool TryShow(object application)
+    {
+        try
+        {
+            ((dynamic)application).Visible = true;
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -234,5 +268,7 @@ public sealed class WordComConversionService : IConversionService, IDisposable
             _recorded = created;
             return created.Count > 0;
         }
+
+        public void HandOver() => _recorded = new HashSet<int>();
     }
 }

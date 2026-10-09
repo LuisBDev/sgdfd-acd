@@ -90,6 +90,46 @@ public sealed class WordComConversionServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task conversion_deshabilitaLasMacrosAntesDeAbrirElDocumento()
+    {
+        int? securityAtOpen = null;
+        FakeWord? word = null;
+        var documents = new FakeDocuments(_ => securityAtOpen = word!.AutomationSecurity);
+        word = new FakeWord(documents, () => _processes.Exit(CreatedWordPid));
+        var service = CreateService(
+            () =>
+            {
+                _processes.Start(CreatedWordPid, automation: true);
+                return word;
+            },
+            TimeSpan.FromSeconds(5));
+
+        await service.ConvertDocxToPdfAsync(Docx, CancellationToken.None);
+
+        Assert.Equal(3, securityAtOpen);
+    }
+
+    [Fact]
+    public async Task conversionConDocumentoDelUsuarioEnLaInstanciaCreada_noCierraWordYLoDejaVisible()
+    {
+        var word = new FakeWord(new FakeDocuments(_ => { }, userDocuments: 1), () => _processes.Exit(CreatedWordPid));
+        var service = CreateService(
+            () =>
+            {
+                _processes.Start(CreatedWordPid, automation: true);
+                return word;
+            },
+            TimeSpan.FromSeconds(5));
+
+        var pdf = await service.ConvertDocxToPdfAsync(Docx, CancellationToken.None);
+
+        Assert.StartsWith("%PDF", Encoding.ASCII.GetString(pdf));
+        Assert.False(word.QuitCalled);
+        Assert.True(word.Visible);
+        Assert.Empty(_processes.Killed);
+    }
+
+    [Fact]
     public async Task conversionesConcurrentes_seSerializan()
     {
         var running = 0;
@@ -172,6 +212,7 @@ public sealed class WordComConversionServiceTests : IDisposable
     {
         public bool Visible { get; set; } = true;
         public int DisplayAlerts { get; set; } = -1;
+        public int AutomationSecurity { get; set; } = 1;
         public bool QuitCalled { get; private set; }
         public FakeDocuments Documents { get; } = documents;
 
@@ -182,22 +223,25 @@ public sealed class WordComConversionServiceTests : IDisposable
         }
     }
 
-    public sealed class FakeDocuments(Action<string> onOpen)
+    public sealed class FakeDocuments(Action<string> onOpen, int userDocuments = 0)
     {
+        private int _openedByConversion;
+
+        public int Count => userDocuments + Volatile.Read(ref _openedByConversion);
+
         public FakeDocument Open(string FileName, bool ConfirmConversions, bool ReadOnly, bool AddToRecentFiles)
         {
             onOpen(FileName);
-            return new FakeDocument();
+            Interlocked.Increment(ref _openedByConversion);
+            return new FakeDocument(() => Interlocked.Decrement(ref _openedByConversion));
         }
     }
 
-    public sealed class FakeDocument
+    public sealed class FakeDocument(Action onClose)
     {
         public void ExportAsFixedFormat(string OutputFileName, int ExportFormat) =>
             File.WriteAllBytes(OutputFileName, Encoding.ASCII.GetBytes("%PDF-1.7 fake"));
 
-        public void Close(int saveChanges)
-        {
-        }
+        public void Close(int saveChanges) => onClose();
     }
 }
