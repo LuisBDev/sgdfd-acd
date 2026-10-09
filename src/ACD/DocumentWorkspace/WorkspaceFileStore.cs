@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using Microsoft.Win32.SafeHandles;
 
 namespace ACD.DocumentWorkspace;
 
@@ -36,7 +37,7 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
 
         using var stream = OpenShared(path);
         var size = stream.Length;
-        var changedAt = EffectiveChangedAt(path);
+        var changedAt = EffectiveChangedAt(stream.SafeFileHandle);
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
         return new WordFileInfo(Path.GetFileName(path), changedAt, size, sha256);
     }
@@ -67,7 +68,7 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
             throw;
         }
 
-        return Describe(path, content);
+        return Describe(path, EffectiveChangedAt(path), content);
     }
 
     public async Task<(WordFileInfo Info, byte[] Content)> ReadWordAsync(string directory, string fileName, CancellationToken ct)
@@ -79,7 +80,7 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
 
         var content = new byte[stream.Length];
         await stream.ReadExactlyAsync(content, ct).ConfigureAwait(false);
-        return (Describe(path, content), content);
+        return (Describe(path, EffectiveChangedAt(stream.SafeFileHandle), content), content);
     }
 
     public async Task<(string FileName, bool Renamed)> WritePdfCopyAsync(string directory, string wordFileName, byte[] pdf, CancellationToken ct)
@@ -108,15 +109,18 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
     private static FileStream OpenShared(string path) =>
         new(path, FileMode.Open, FileAccess.Read, ReadWhileOpenInWord);
 
-    private static WordFileInfo Describe(string path, byte[] content) =>
+    private static WordFileInfo Describe(string path, DateTime changedAt, byte[] content) =>
         new(
             Path.GetFileName(path),
-            EffectiveChangedAt(path),
+            changedAt,
             content.LongLength,
             Convert.ToHexStringLower(SHA256.HashData(content)));
 
     private static DateTime EffectiveChangedAt(string path) =>
         WorkspaceFileNames.EffectiveChangedAt(new FileInfo(path));
+
+    private static DateTime EffectiveChangedAt(SafeFileHandle handle) =>
+        WorkspaceFileNames.EffectiveChangedAt(File.GetCreationTime(handle), File.GetLastWriteTime(handle));
 
     private static bool IsLocked(IOException ex) =>
         ex.HResult is SharingViolationHResult or LockViolationHResult;

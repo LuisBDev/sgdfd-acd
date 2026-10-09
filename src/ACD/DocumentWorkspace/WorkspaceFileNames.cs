@@ -27,7 +27,10 @@ public static class WorkspaceFileNames
     }
 
     public static DateTime EffectiveChangedAt(FileInfo file) =>
-        file.CreationTime > file.LastWriteTime ? file.CreationTime : file.LastWriteTime;
+        EffectiveChangedAt(file.CreationTime, file.LastWriteTime);
+
+    public static DateTime EffectiveChangedAt(DateTime creationTime, DateTime lastWriteTime) =>
+        creationTime > lastWriteTime ? creationTime : lastWriteTime;
 
     public static string PdfCopyName(string wordFileName) =>
         Path.GetFileNameWithoutExtension(wordFileName) + PdfExtension;

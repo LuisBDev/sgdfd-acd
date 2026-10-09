@@ -105,6 +105,7 @@ builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("U
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
 builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactory>();
 builder.Services.AddSingleton<IStableFileProbe, StableFileProbe>();
+builder.Services.AddSingleton<IWorkspaceWatcherFactory, WorkspaceWatcherFactory>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
