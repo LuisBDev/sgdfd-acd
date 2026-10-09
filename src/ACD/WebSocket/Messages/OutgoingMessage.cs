@@ -74,48 +74,81 @@ public sealed record PdfOpenedMessage(
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfOpened;
 }
 
-public sealed record DocumentOpenedMessage(
+public sealed record LatestWordPayload(
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256);
+
+public sealed record WordWrittenMessage(
     [property: JsonPropertyName("requestId")]
-    string RequestId)
+    string RequestId,
+    [property: JsonPropertyName("filename")]
+    string Filename,
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt,
+    [property: JsonPropertyName("opened")] bool Opened)
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.DocumentOpened;
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordWritten;
 }
 
-public sealed record EditedPdfReadyMessage(
+public sealed record WordContentMessage(
     [property: JsonPropertyName("requestId")]
     string RequestId,
     [property: JsonPropertyName("filename")]
     string Filename,
     [property: JsonPropertyName("size")] long Size,
-    [property: JsonPropertyName("version")]
-    int Version)
+    [property: JsonPropertyName("sha256")] string Sha256,
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt)
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdfReady;
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordContent;
 }
 
-public sealed record EditedPdfMessage(
+public sealed record PdfCopyWrittenMessage(
     [property: JsonPropertyName("requestId")]
     string RequestId,
     [property: JsonPropertyName("filename")]
     string Filename,
-    [property: JsonPropertyName("size")] long Size)
+    [property: JsonPropertyName("renamed")]
+    bool Renamed)
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdf;
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfCopyWritten;
 }
 
-public sealed record EditedPdfUnavailableMessage(
-    [property: JsonPropertyName("requestId")]
-    string RequestId,
-    [property: JsonPropertyName("code")] string Code,
-    [property: JsonPropertyName("message")]
-    string Message)
-{
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditedPdfUnavailable;
-}
-
-public sealed record EditTimeoutMessage(
+public sealed record FolderOpenedMessage(
     [property: JsonPropertyName("requestId")]
     string RequestId)
 {
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.EditTimeout;
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.FolderOpened;
+}
+
+public sealed record PdfContentMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfContent;
+}
+
+public sealed record WorkspaceWatchingMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("folder")] string Folder,
+    [property: JsonPropertyName("latestWord")]
+    LatestWordPayload? LatestWord)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceWatching;
+}
+
+public sealed record WorkspaceChangedMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("latestWord")]
+    LatestWordPayload? LatestWord)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceChanged;
 }

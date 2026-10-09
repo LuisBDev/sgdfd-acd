@@ -1,6 +1,6 @@
 using System.Reflection;
 using ACD.Configuration;
-using ACD.DocumentEdit;
+using ACD.DocumentWorkspace;
 using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
@@ -105,6 +105,7 @@ builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("U
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
 builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactory>();
 builder.Services.AddSingleton<IStableFileProbe, StableFileProbe>();
+builder.Services.AddSingleton<IWorkspaceWatcherFactory, WorkspaceWatcherFactory>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
@@ -116,11 +117,23 @@ builder.Services.AddSingleton<IShellLauncher, ShellLauncher>();
 builder.Services.AddSingleton(sp => new PdfOpenStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
     sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
-builder.Services.AddSingleton<IEditedPdfWatcherFactory, EditedPdfWatcherFactory>();
-builder.Services.AddSingleton(sp => new DocumentEditStorage(
-    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit,
-    TimeProvider.System,
-    sp.GetRequiredService<ILogger<DocumentEditStorage>>()));
+builder.Services.AddSingleton(sp => new WorkspacePaths(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace));
+builder.Services.AddSingleton(sp => new WorkspaceFileStore(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.MaxFileBytes));
+builder.Services.AddSingleton<WinWordProcesses>();
+builder.Services.AddSingleton<IConversionService>(sp =>
+{
+    var wordProcesses = sp.GetRequiredService<WinWordProcesses>();
+    return new WordComConversionService(
+        WordComConversionService.CreateWordApplication,
+        wordProcesses,
+        new WordConversionSettings(
+            sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.GetConversionTimeout(),
+            TimeSpan.FromSeconds(5),
+            Path.Combine(Path.GetTempPath(), "acd-conv")),
+        sp.GetRequiredService<ILogger<WordComConversionService>>());
+});
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());

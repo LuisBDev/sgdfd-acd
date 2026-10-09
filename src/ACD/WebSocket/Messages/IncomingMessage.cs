@@ -40,17 +40,50 @@ public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("filename")]
     string Filename);
 
-public sealed record EditDocumentMessage(
+public sealed record WriteWordMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
     [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256,
+    [property: JsonPropertyName("open")] bool Open);
+
+public sealed record ReadWordMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("filename")] string? Filename);
+
+public sealed record WritePdfCopyMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("wordFilename")] string? WordFilename,
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("sha256")] string? Sha256);
 
-public sealed record RequestEditedPdfMessage(
+public sealed record ConvertToPdfMessage(
     [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("requestId")] string? RequestId);
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256);
 
-public sealed record CancelEditMessage(
+public sealed record OpenFolderMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
+
+public sealed record WatchWorkspaceMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
+
+public sealed record StopWatchMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId);
