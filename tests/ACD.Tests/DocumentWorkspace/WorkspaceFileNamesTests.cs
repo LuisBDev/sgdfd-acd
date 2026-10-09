@@ -22,6 +22,30 @@ public sealed class WorkspaceFileNamesTests : IDisposable
     }
 
     [Fact]
+    public void FindLatestWord_orders_by_max_of_creation_and_last_write()
+    {
+        var day = new DateTime(2026, 10, 9, 0, 0, 0, DateTimeKind.Local);
+        CreateFile("a.docx", creationTime: day.AddHours(9), changedTime: day.AddHours(10));
+        CreateFile("b.docx", creationTime: day.AddHours(11), changedTime: day.AddHours(8));
+
+        var latest = WorkspaceFileNames.FindLatestWord(_directory);
+
+        Assert.Equal(Path.Combine(_directory, "b.docx"), latest);
+    }
+
+    [Fact]
+    public void FindLatestWord_breaks_ties_by_name_descending()
+    {
+        var changedAt = new DateTime(2026, 10, 9, 8, 15, 0, DateTimeKind.Local);
+        CreateFile("x_20261009-081240.docx", changedAt);
+        CreateFile("x_20261009-075123.docx", changedAt);
+
+        var latest = WorkspaceFileNames.FindLatestWord(_directory);
+
+        Assert.Equal(Path.Combine(_directory, "x_20261009-081240.docx"), latest);
+    }
+
+    [Fact]
     public void FindLatestWord_returns_null_for_an_empty_directory()
     {
         Assert.Null(WorkspaceFileNames.FindLatestWord(_directory));
@@ -61,11 +85,15 @@ public sealed class WorkspaceFileNamesTests : IDisposable
         Assert.Equal("OFICIO_2026-1_20261008-204419 (2).pdf", WorkspaceFileNames.AlternatePdfCopyName("OFICIO_2026-1_20261008-204419.docx"));
     }
 
-    private void CreateFile(string name, DateTime lastWriteTime)
+    private void CreateFile(string name, DateTime changedAt) =>
+        CreateFile(name, changedAt, changedAt);
+
+    private void CreateFile(string name, DateTime creationTime, DateTime changedTime)
     {
         var path = Path.Combine(_directory, name);
         File.WriteAllBytes(path, [1]);
-        File.SetLastWriteTime(path, lastWriteTime);
+        File.SetCreationTime(path, creationTime);
+        File.SetLastWriteTime(path, changedTime);
     }
 
     public void Dispose() => Directory.Delete(_directory, recursive: true);

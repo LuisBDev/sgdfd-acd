@@ -47,32 +47,6 @@ public sealed class DocumentWorkspaceHandler
 
     public long? PendingSize => _pending?.Size;
 
-    public async Task<SessionState> SendStatusAsync(NativeWebSocket ws, WorkspaceStatusMessage message, CancellationToken ct)
-    {
-        if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection))
-            return await RejectAsync(ws, rejection!, ct);
-
-        WorkspaceStatus status;
-        try
-        {
-            status = _store.GetStatus(directory);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            return await RejectIoAsync(ws, ex, "Could not read the remito folder", ct);
-        }
-
-        var latestWord = status.LatestWord is { } word
-            ? new LatestWordPayload(word.FileName, FormatLocal(word.LastWriteTime), word.Size, word.Sha256)
-            : null;
-        await WebSocketTransport.SendJsonAsync(
-            ws,
-            new WorkspaceStatusResultMessage(message.RequestId!, status.FolderExists, latestWord),
-            AcdJsonContext.Default.WorkspaceStatusResultMessage,
-            ct);
-        return await CompleteAsync(ws, MessageType.WorkspaceStatusResult, ct);
-    }
-
     public async Task<SessionState> PrepareWriteWordAsync(NativeWebSocket ws, WriteWordMessage message, CancellationToken ct)
     {
         if (!TryResolveRemito(message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
@@ -153,7 +127,7 @@ public sealed class DocumentWorkspaceHandler
 
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new WordContentMessage(message.RequestId!, info.FileName, info.Size, info.Sha256, FormatLocal(info.LastWriteTime)),
+            new WordContentMessage(message.RequestId!, info.FileName, info.Size, info.Sha256, FormatLocal(info.ChangedAt)),
             AcdJsonContext.Default.WordContentMessage,
             ct);
         await ws.SendAsync(content, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
@@ -202,7 +176,7 @@ public sealed class DocumentWorkspaceHandler
 
         await WebSocketTransport.SendJsonAsync(
             ws,
-            new WordWrittenMessage(pending.RequestId, info.FileName, FormatLocal(info.LastWriteTime), opened),
+            new WordWrittenMessage(pending.RequestId, info.FileName, FormatLocal(info.ChangedAt), opened),
             AcdJsonContext.Default.WordWrittenMessage,
             ct);
         return await CompleteAsync(ws, MessageType.WordWritten, ct);

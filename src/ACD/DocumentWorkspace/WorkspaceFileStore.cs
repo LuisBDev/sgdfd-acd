@@ -2,9 +2,7 @@ using System.Security.Cryptography;
 
 namespace ACD.DocumentWorkspace;
 
-public sealed record WordFileInfo(string FileName, DateTime LastWriteTime, long Size, string Sha256);
-
-public sealed record WorkspaceStatus(bool FolderExists, WordFileInfo? LatestWord);
+public sealed record WordFileInfo(string FileName, DateTime ChangedAt, long Size, string Sha256);
 
 public sealed class WorkspaceFileExistsException(string fileName)
     : IOException($"The file {fileName} already exists in the remito folder");
@@ -19,32 +17,28 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
     private const int LockViolationHResult = unchecked((int)0x80070021);
     private const FileShare ReadWhileOpenInWord = FileShare.ReadWrite | FileShare.Delete;
 
-    public WorkspaceStatus GetStatus(string directory)
+    public WordFileInfo? DescribeLatestWord(string directory)
     {
-        if (!Directory.Exists(directory))
-            return new WorkspaceStatus(false, null);
-
         try
         {
-            return new WorkspaceStatus(true, DescribeLatestWord(directory));
+            return DescribeWord(WorkspaceFileNames.FindLatestWord(directory));
         }
         catch (FileNotFoundException)
         {
-            return new WorkspaceStatus(true, DescribeLatestWord(directory));
+            return DescribeWord(WorkspaceFileNames.FindLatestWord(directory));
         }
     }
 
-    private static WordFileInfo? DescribeLatestWord(string directory)
+    private static WordFileInfo? DescribeWord(string? path)
     {
-        var latestWord = WorkspaceFileNames.FindLatestWord(directory);
-        if (latestWord is null)
+        if (path is null)
             return null;
 
-        using var stream = OpenShared(latestWord);
+        using var stream = OpenShared(path);
         var size = stream.Length;
-        var lastWriteTime = File.GetLastWriteTime(stream.SafeFileHandle);
+        var changedAt = EffectiveChangedAt(path);
         var sha256 = Convert.ToHexStringLower(SHA256.HashData(stream));
-        return new WordFileInfo(Path.GetFileName(latestWord), lastWriteTime, size, sha256);
+        return new WordFileInfo(Path.GetFileName(path), changedAt, size, sha256);
     }
 
     public async Task<WordFileInfo> WriteWordAsync(string directory, string fileName, byte[] content, CancellationToken ct)
@@ -117,9 +111,12 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
     private static WordFileInfo Describe(string path, byte[] content) =>
         new(
             Path.GetFileName(path),
-            File.GetLastWriteTime(path),
+            EffectiveChangedAt(path),
             content.LongLength,
             Convert.ToHexStringLower(SHA256.HashData(content)));
+
+    private static DateTime EffectiveChangedAt(string path) =>
+        WorkspaceFileNames.EffectiveChangedAt(new FileInfo(path));
 
     private static bool IsLocked(IOException ex) =>
         ex.HResult is SharingViolationHResult or LockViolationHResult;

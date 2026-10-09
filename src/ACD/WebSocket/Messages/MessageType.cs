@@ -7,7 +7,6 @@ public static class MessageType
     public const string PdfDownload = "PDF_DOWNLOAD";
     public const string OpenPdf = "OPEN_PDF";
     public const string RequestSignedFile = "REQUEST_SIGNED_FILE";
-    public const string WorkspaceStatus = "WORKSPACE_STATUS";
     public const string WriteWord = "WRITE_WORD";
     public const string ReadWord = "READ_WORD";
     public const string WritePdfCopy = "WRITE_PDF_COPY";
@@ -22,7 +21,6 @@ public static class MessageType
     public const string FirmaDisponible = "FIRMA_DISPONIBLE";
     public const string SignedFile = "SIGNED_FILE";
     public const string FirmaTimeout = "FIRMA_TIMEOUT";
-    public const string WorkspaceStatusResult = "WORKSPACE_STATUS_RESULT";
     public const string WordWritten = "WORD_WRITTEN";
     public const string WordContent = "WORD_CONTENT";
     public const string PdfCopyWritten = "PDF_COPY_WRITTEN";

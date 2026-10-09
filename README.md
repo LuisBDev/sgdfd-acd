@@ -22,18 +22,16 @@ Every session starts with `CONNECTED` (sent by ACD) followed by `AUTH` → `AUTH
 
 Reads and writes the Word document and the PDF copy of a remito in its folder on the device, and converts a `.docx` to PDF with Microsoft Word. Each command is a session of its own: `AUTH` → `AUTH_OK`, the command, its response, then ACD closes with `1000`.
 
-The remito folder is `<root>\<anio>\<numeroEmision>`, where `<root>` is the user's Documents folder (`SpecialFolder.MyDocuments`, so a OneDrive redirection is honored) plus `TDOCUMENTOS\MPD`; `Acd:DocumentWorkspace:RootDirectory` overrides it (environment variables are expanded). `anio` must be 4 digits and `numeroEmision` 1 to 10 digits; it is used as sent, leading zeros included. Otherwise ACD answers `WORKSPACE_INVALID_KEY`. `filename` must be a safe name: no paths or `..`, at most 180 characters, exact extension. The "Word of the remito" is the `*.docx` with the latest `LastWriteTime` in the folder, excluding `~$*` lock files.
+The remito folder is `<root>\<anio>\<numeroEmision>`, where `<root>` is the user's Documents folder (`SpecialFolder.MyDocuments`, so a OneDrive redirection is honored) plus `TDOCUMENTOS\MPD`; `Acd:DocumentWorkspace:RootDirectory` overrides it (environment variables are expanded). `anio` must be 4 digits and `numeroEmision` 1 to 10 digits; it is used as sent, leading zeros included. Otherwise ACD answers `WORKSPACE_INVALID_KEY`. `filename` must be a safe name: no paths or `..`, at most 180 characters, exact extension. The "Word of the remito" is the `*.docx` in the folder with the latest effective date `changedAt = max(CreationTime, LastWriteTime)`, excluding `~$*` lock files, so a Word pasted into the folder becomes active even if its `LastWriteTime` is older. On a tie, the name that sorts last wins (ordinal, case-insensitive), which picks the most recent `_<YYYYMMDD-HHMMSS>` suffix.
 
 For binary payloads the JSON declares `size` (1 to `Acd:DocumentWorkspace:MaxFileBytes`, 20 MiB by default) and `sha256` (64 hexadecimal characters), and the binary frame follows immediately. Timestamps are local time without zone (`yyyy-MM-ddTHH:mm:ss`).
 
 | Direction | Message | Fields |
 |-----------|---------|--------|
-| Web → ACD | `WORKSPACE_STATUS` | `requestId` (UUID), `anio`, `numeroEmision` |
-| ACD → Web | `WORKSPACE_STATUS_RESULT` | `requestId`, `folderExists`, `latestWord` (`filename`, `lastWriteTime`, `size`, `sha256`, or `null`) |
-| Web → ACD | `WRITE_WORD` + 1 binary frame | `requestId`, `anio`, `numeroEmision`, `filename`, `size`, `sha256`, `open` |
-| ACD → Web | `WORD_WRITTEN` | `requestId`, `filename`, `lastWriteTime`, `opened` |
+| Web → ACD | `WRITE_WORD` + 1 binary frame | `requestId` (UUID), `anio`, `numeroEmision`, `filename`, `size`, `sha256`, `open` |
+| ACD → Web | `WORD_WRITTEN` | `requestId`, `filename`, `changedAt`, `opened` |
 | Web → ACD | `READ_WORD` | `requestId`, `anio`, `numeroEmision`, `filename` |
-| ACD → Web | `WORD_CONTENT` + 1 binary frame | `requestId`, `filename`, `size`, `sha256`, `lastWriteTime` |
+| ACD → Web | `WORD_CONTENT` + 1 binary frame | `requestId`, `filename`, `size`, `sha256`, `changedAt` |
 | Web → ACD | `CONVERT_TO_PDF` + 1 binary frame | `requestId`, `size`, `sha256` |
 | ACD → Web | `PDF_CONTENT` + 1 binary frame | `requestId`, `size`, `sha256` |
 | Web → ACD | `WRITE_PDF_COPY` + 1 binary frame | `requestId`, `anio`, `numeroEmision`, `wordFilename`, `size`, `sha256` |
@@ -42,7 +40,7 @@ For binary payloads the JSON declares `size` (1 to `Acd:DocumentWorkspace:MaxFil
 | ACD → Web | `FOLDER_OPENED` | `requestId` |
 
 1. `WRITE_WORD` creates the file with `CreateNew` and never overwrites: an existing name returns `WORKSPACE_FILE_EXISTS`. The folder is created when missing. With `open: true`, ACD launches the file with the Windows default application. The launch result is reported in `opened`, which is also `false` when `open` is `false`. The file stays in the folder either way, and a failed launch is not an `ERROR`.
-2. `READ_WORD` and `WORKSPACE_STATUS` open the file with read and delete sharing, so they work while Word has the document open. A local `.docx` over `MaxFileBytes` returns `INVALID_FILE_SIZE` on `READ_WORD`.
+2. `READ_WORD` opens the file with read and delete sharing, so it works while Word has the document open. A local `.docx` over `MaxFileBytes` returns `INVALID_FILE_SIZE` on `READ_WORD`.
 3. `WRITE_PDF_COPY` names the PDF after `wordFilename` with the `.pdf` extension. If that PDF is locked by another program, ACD writes `<name> (2).pdf` and answers `renamed: true`. Otherwise it overwrites the existing PDF.
 4. `CONVERT_TO_PDF` runs in its own slot: it does not block the other workspace commands, but only one conversion runs at a time. A second conversion while one is active is rejected with `SESSION_BUSY` (close `4002`); it is not queued. Word runs hidden, with alerts and macros off, and opens the document read-only. ACD only acts on the Word instance it created for that conversion, never on Word instances that were already running. If the user opens a document while the conversion runs and Windows routes it into that instance, ACD leaves the instance open and visible instead of quitting it. On timeout, or if Word stops responding, ACD ends the instance it created even if it holds such a document. The timeout is `Acd:DocumentWorkspace:ConversionTimeoutSeconds` (default 90).
 5. The workspace commands other than `CONVERT_TO_PDF` share one slot, so a second one while another is active returns `SESSION_BUSY` (close `4002`).

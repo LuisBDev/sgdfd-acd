@@ -20,10 +20,14 @@ public static class WorkspaceFileNames
             .EnumerateFiles("*" + WordExtension)
             .Where(file => string.Equals(file.Extension, WordExtension, StringComparison.OrdinalIgnoreCase))
             .Where(file => !file.Name.StartsWith(LockFilePrefix, StringComparison.Ordinal))
-            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .OrderByDescending(EffectiveChangedAt)
+            .ThenByDescending(file => file.Name, StringComparer.OrdinalIgnoreCase)
             .Select(file => file.FullName)
             .FirstOrDefault();
     }
+
+    public static DateTime EffectiveChangedAt(FileInfo file) =>
+        file.CreationTime > file.LastWriteTime ? file.CreationTime : file.LastWriteTime;
 
     public static string PdfCopyName(string wordFileName) =>
         Path.GetFileNameWithoutExtension(wordFileName) + PdfExtension;

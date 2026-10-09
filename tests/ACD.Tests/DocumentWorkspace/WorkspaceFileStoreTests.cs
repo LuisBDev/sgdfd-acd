@@ -42,21 +42,21 @@ public sealed class WorkspaceFileStoreTests : IDisposable
     }
 
     [Fact]
-    public void GetStatus_devuelveHashYFechaDelMasReciente()
+    public void DescribeLatestWord_devuelveHashYFechaEfectivaDelMasReciente()
     {
         Directory.CreateDirectory(RemitoDirectory);
-        var lastWriteTime = new DateTime(2026, 10, 9, 10, 30, 15, DateTimeKind.Local);
-        CreateFile("anterior.docx", [1], lastWriteTime.AddMinutes(-5));
-        CreateFile("reciente.docx", [2, 3], lastWriteTime);
+        var changedAt = new DateTime(2026, 10, 9, 10, 30, 15, DateTimeKind.Local);
+        CreateFile("anterior.docx", [1], changedAt.AddMinutes(-5));
+        CreateFile("reciente.docx", [2, 3], changedAt.AddMinutes(-20));
+        File.SetCreationTime(Path.Combine(RemitoDirectory, "reciente.docx"), changedAt);
 
-        var status = _store.GetStatus(RemitoDirectory);
+        var latestWord = _store.DescribeLatestWord(RemitoDirectory);
 
-        Assert.True(status.FolderExists);
-        Assert.NotNull(status.LatestWord);
-        Assert.Equal("reciente.docx", status.LatestWord.FileName);
-        Assert.Equal(lastWriteTime, status.LatestWord.LastWriteTime);
-        Assert.Equal(2, status.LatestWord.Size);
-        Assert.Equal(Sha256Of([2, 3]), status.LatestWord.Sha256);
+        Assert.NotNull(latestWord);
+        Assert.Equal("reciente.docx", latestWord.FileName);
+        Assert.Equal(changedAt, latestWord.ChangedAt);
+        Assert.Equal(2, latestWord.Size);
+        Assert.Equal(Sha256Of([2, 3]), latestWord.Sha256);
     }
 
     [Fact]
@@ -91,11 +91,12 @@ public sealed class WorkspaceFileStoreTests : IDisposable
             () => _store.ReadWordAsync(RemitoDirectory, "OFICIO.docx", CancellationToken.None));
     }
 
-    private void CreateFile(string name, byte[] content, DateTime lastWriteTime)
+    private void CreateFile(string name, byte[] content, DateTime changedAt)
     {
         var path = Path.Combine(RemitoDirectory, name);
         File.WriteAllBytes(path, content);
-        File.SetLastWriteTime(path, lastWriteTime);
+        File.SetCreationTime(path, changedAt);
+        File.SetLastWriteTime(path, changedAt);
     }
 
     private static string Sha256Of(byte[] content) => Convert.ToHexStringLower(SHA256.HashData(content));

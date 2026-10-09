@@ -77,29 +77,18 @@ public sealed record PdfOpenedMessage(
 public sealed record LatestWordPayload(
     [property: JsonPropertyName("filename")]
     string Filename,
-    [property: JsonPropertyName("lastWriteTime")]
-    string LastWriteTime,
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt,
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("sha256")] string Sha256);
-
-public sealed record WorkspaceStatusResultMessage(
-    [property: JsonPropertyName("requestId")]
-    string RequestId,
-    [property: JsonPropertyName("folderExists")]
-    bool FolderExists,
-    [property: JsonPropertyName("latestWord")]
-    LatestWordPayload? LatestWord)
-{
-    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceStatusResult;
-}
 
 public sealed record WordWrittenMessage(
     [property: JsonPropertyName("requestId")]
     string RequestId,
     [property: JsonPropertyName("filename")]
     string Filename,
-    [property: JsonPropertyName("lastWriteTime")]
-    string LastWriteTime,
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt,
     [property: JsonPropertyName("opened")] bool Opened)
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordWritten;
@@ -112,8 +101,8 @@ public sealed record WordContentMessage(
     string Filename,
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("sha256")] string Sha256,
-    [property: JsonPropertyName("lastWriteTime")]
-    string LastWriteTime)
+    [property: JsonPropertyName("changedAt")]
+    string ChangedAt)
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordContent;
 }

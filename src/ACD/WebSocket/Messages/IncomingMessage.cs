@@ -40,12 +40,6 @@ public sealed record RequestSignedFileMessage(
     [property: JsonPropertyName("filename")]
     string Filename);
 
-public sealed record WorkspaceStatusMessage(
-    [property: JsonPropertyName("type")] string Type,
-    [property: JsonPropertyName("requestId")] string? RequestId,
-    [property: JsonPropertyName("anio")] string? Anio,
-    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision);
-
 public sealed record WriteWordMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId,
