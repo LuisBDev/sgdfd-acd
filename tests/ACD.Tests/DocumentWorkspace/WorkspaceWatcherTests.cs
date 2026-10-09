@@ -142,6 +142,21 @@ public sealed partial class WorkspaceWatcherTests : IDisposable
     }
 
     [Fact]
+    public async Task Transient_read_failure_is_retried_without_another_event()
+    {
+        WriteWord("a.docx", [1], BaseTime);
+        await using var watcher = StartWatcher();
+        byte[] saved = [8, 8, 8];
+
+        await File.WriteAllBytesAsync(PathOf("a.docx"), saved);
+        await using (new FileStream(PathOf("a.docx"), FileMode.Open, FileAccess.Read, FileShare.None))
+            await Task.Delay(TimeSpan.FromMilliseconds(400));
+
+        var snapshot = await NextAsync(watcher);
+        Assert.Equal(Sha256Of(saved), snapshot?.Sha256);
+    }
+
+    [Fact]
     public async Task Pasted_file_with_old_last_write_and_new_creation_becomes_active()
     {
         WriteWord("a.docx", [1], BaseTime);

@@ -10,8 +10,10 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
     private const int NotStarted = 0;
     private const int Running = 1;
     private const int Disposed = 2;
+    private const int MaxReadRetries = 5;
 
     private static readonly TimeSpan StabilizationTimeout = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MinRetryDelay = TimeSpan.FromMilliseconds(250);
 
     private static readonly StableFileProbeOptions ProbeOptions = new()
     {
@@ -27,13 +29,15 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
     private readonly object _gate = new();
     private readonly ILogger<WorkspaceWatcher> _logger;
     private readonly IStableFileProbe _probe;
+    private readonly TimeSpan _retryDelay;
     private readonly WorkspaceFileStore _store;
 
     private WordFileInfo? _current;
     private CancellationTokenRegistration _externalRegistration;
     private long _generation;
-    private long _lastEventAt;
     private CancellationTokenSource? _probeCts;
+    private long _quietUntil;
+    private int _readRetries;
     private bool _snapshotReady;
     private int _state;
     private FileSystemWatcher? _watcher;
@@ -52,6 +56,7 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         _store = store;
         _probe = probe;
         _debounce = debounce < TimeSpan.Zero ? TimeSpan.Zero : debounce;
+        _retryDelay = _debounce > MinRetryDelay ? _debounce : MinRetryDelay;
         _logger = logger;
     }
 
@@ -229,6 +234,7 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
             if (Volatile.Read(ref _state) != Running || _cts.IsCancellationRequested) return;
 
             MarkEventLocked();
+            _readRetries = 0;
             pendingProbe = _probeCts;
             _probeCts = null;
             if (_snapshotReady)
@@ -238,10 +244,27 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         CancelProbe(pendingProbe);
     }
 
-    private void MarkEventLocked()
+    private void MarkEventLocked() => DeferLocked(_debounce);
+
+    private void DeferLocked(TimeSpan quietPeriod)
     {
         _generation++;
-        _lastEventAt = Environment.TickCount64;
+        _quietUntil = Environment.TickCount64 + (long)quietPeriod.TotalMilliseconds;
+    }
+
+    private bool TryScheduleRetryLocked()
+    {
+        if (_readRetries >= MaxReadRetries)
+        {
+            _logger.LogWarning(
+                "No se pudo leer el Word activo de {Directory} tras {Retries} reintentos; se espera el siguiente evento",
+                _directory, _readRetries);
+            return false;
+        }
+
+        _readRetries++;
+        DeferLocked(_retryDelay);
+        return true;
     }
 
     private void StartWorkerLocked()
@@ -274,13 +297,13 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
                 while (!TryGetQuietGeneration(out generation, out var remaining))
                     await Task.Delay(remaining, token).ConfigureAwait(false);
 
-                await WaitForStableCandidateAsync(generation, token).ConfigureAwait(false);
-                if (IsCurrentGeneration(generation))
-                    Refresh(generation);
+                var read = await TryRefreshAsync(generation, token).ConfigureAwait(false);
 
                 lock (_gate)
                 {
+                    if (read) _readRetries = 0;
                     if (_generation != generation) continue;
+                    if (!read && TryScheduleRetryLocked()) continue;
                     _workerRunning = false;
                     return;
                 }
@@ -289,11 +312,6 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
         }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Error inesperado al revisar {Directory}; se reintentará con el siguiente evento", _directory);
-            lock (_gate) _workerRunning = false;
-        }
     }
 
     private bool TryGetQuietGeneration(out long generation, out TimeSpan remaining)
@@ -301,8 +319,7 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         lock (_gate)
         {
             generation = _generation;
-            var elapsed = TimeSpan.FromMilliseconds(Environment.TickCount64 - _lastEventAt);
-            remaining = _debounce - elapsed;
+            remaining = TimeSpan.FromMilliseconds(_quietUntil - Environment.TickCount64);
             return remaining <= TimeSpan.Zero;
         }
     }
@@ -343,10 +360,26 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         }
     }
 
+    private async Task<bool> TryRefreshAsync(long generation, CancellationToken token)
+    {
+        try
+        {
+            await WaitForStableCandidateAsync(generation, token).ConfigureAwait(false);
+            if (IsCurrentGeneration(generation))
+                Refresh(generation);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !token.IsCancellationRequested)
+        {
+            _logger.LogDebug(ex, "No se pudo leer el Word activo de {Directory}; se reintentará", _directory);
+            return false;
+        }
+    }
+
     private void Refresh(long generation)
     {
         if (LatestWordMatchesCurrent()) return;
-        if (!TryDescribeLatestWord(out var snapshot)) return;
+        var snapshot = _store.DescribeLatestWord(_directory);
 
         lock (_gate)
         {
@@ -384,7 +417,7 @@ public sealed class WorkspaceWatcher : IWorkspaceWatcher
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _logger.LogDebug(ex, "No se pudo leer el Word activo de {Directory}; se espera el siguiente evento", _directory);
+            _logger.LogDebug(ex, "No se pudo leer la foto inicial de {Directory}; se reprograma la lectura", _directory);
             snapshot = null;
             return false;
         }
