@@ -247,6 +247,13 @@ public sealed class AcdSessionHandler
                 _state = await _documentWorkspaceHandler.OpenFolderAsync(webSocket, openFolderMsg, ct);
                 break;
 
+            case (SessionState.Authenticated, MessageType.ConvertToPdf):
+                var convertMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.ConvertToPdfMessage);
+                if (convertMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Workspace, ct)) return;
+                _state = await _documentWorkspaceHandler.PrepareConvertToPdfAsync(webSocket, convertMsg, ct);
+                break;
+
             case (SessionState.EditingDocument, MessageType.RequestEditedPdf):
                 var requestEditedMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.RequestEditedPdfMessage);
                 if (requestEditedMsg is null) break;
@@ -366,8 +373,8 @@ public sealed class AcdSessionHandler
             or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout
             or MessageType.DocumentOpened or MessageType.EditedPdfReady or MessageType.EditedPdf or MessageType.EditedPdfUnavailable
             or MessageType.EditTimeout
-            or MessageType.WorkspaceStatus or MessageType.WriteWord or MessageType.ReadWord or MessageType.WritePdfCopy or MessageType.OpenFolder
-            or MessageType.WorkspaceStatusResult or MessageType.WordWritten or MessageType.WordContent or MessageType.PdfCopyWritten or MessageType.FolderOpened
+            or MessageType.WorkspaceStatus or MessageType.WriteWord or MessageType.ReadWord or MessageType.WritePdfCopy or MessageType.OpenFolder or MessageType.ConvertToPdf
+            or MessageType.WorkspaceStatusResult or MessageType.WordWritten or MessageType.WordContent or MessageType.PdfCopyWritten or MessageType.FolderOpened or MessageType.PdfContent
             or MessageType.Error;
     }
 }

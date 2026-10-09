@@ -87,6 +87,12 @@ public sealed record WritePdfCopyMessage(
     [property: JsonPropertyName("size")] long Size,
     [property: JsonPropertyName("sha256")] string? Sha256);
 
+public sealed record ConvertToPdfMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256);
+
 public sealed record OpenFolderMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId,

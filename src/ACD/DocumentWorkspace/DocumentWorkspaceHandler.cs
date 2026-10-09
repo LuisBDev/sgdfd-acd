@@ -16,6 +16,7 @@ public sealed class DocumentWorkspaceHandler
     private const int PolicyViolation = 1008;
     private const int InternalFailure = 1011;
 
+    private readonly IConversionService _conversionService;
     private readonly ILogger _logger;
     private readonly DocumentEditOptions _options;
     private readonly WorkspacePaths _paths;
@@ -29,6 +30,7 @@ public sealed class DocumentWorkspaceHandler
         WorkspacePaths paths,
         WorkspaceFileStore store,
         IShellLauncher shellLauncher,
+        IConversionService conversionService,
         ILogger logger,
         string sessionId)
     {
@@ -36,6 +38,7 @@ public sealed class DocumentWorkspaceHandler
         _paths = paths;
         _store = store;
         _shellLauncher = shellLauncher;
+        _conversionService = conversionService;
         _logger = logger;
         _sessionId = sessionId;
     }
@@ -94,6 +97,17 @@ public sealed class DocumentWorkspaceHandler
         return SessionState.ReceivingWorkspaceFile;
     }
 
+    public async Task<SessionState> PrepareConvertToPdfAsync(NativeWebSocket ws, ConvertToPdfMessage message, CancellationToken ct)
+    {
+        if (!TryValidateRequestId(message.RequestId, out var rejection)
+            || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
+            return await RejectAsync(ws, rejection!, ct);
+
+        _pending = new PendingWrite(PendingKind.Conversion, message.RequestId!, string.Empty, string.Empty, message.Size, message.Sha256!, false);
+        _logger.LogInformation("[{SessionId}] CONVERT_TO_PDF aceptado: request {RequestId}, {Size} bytes", _sessionId, message.RequestId, message.Size);
+        return SessionState.ReceivingWorkspaceFile;
+    }
+
     public async Task<SessionState> HandleBinaryFrameAsync(NativeWebSocket ws, byte[] data, CancellationToken ct)
     {
         var pending = _pending;
@@ -104,9 +118,12 @@ public sealed class DocumentWorkspaceHandler
         if (!MatchesDeclaredContent(pending, data))
             return await RejectAsync(ws, new Rejection(ErrorCatalog.WorkspaceIntegrity, "Binary payload does not match the declared size and sha256", PolicyViolation), ct);
 
-        return pending.Kind == PendingKind.Word
-            ? await WriteWordAsync(ws, pending, data, ct)
-            : await WritePdfCopyAsync(ws, pending, data, ct);
+        return pending.Kind switch
+        {
+            PendingKind.Word => await WriteWordAsync(ws, pending, data, ct),
+            PendingKind.PdfCopy => await WritePdfCopyAsync(ws, pending, data, ct),
+            _ => await ConvertToPdfAsync(ws, pending, data, ct)
+        };
     }
 
     public async Task<SessionState> SendWordAsync(NativeWebSocket ws, ReadWordMessage message, CancellationToken ct)
@@ -211,6 +228,43 @@ public sealed class DocumentWorkspaceHandler
         return await CompleteAsync(ws, MessageType.PdfCopyWritten, ct);
     }
 
+    private async Task<SessionState> ConvertToPdfAsync(NativeWebSocket ws, PendingWrite pending, byte[] docx, CancellationToken ct)
+    {
+        byte[] pdf;
+        try
+        {
+            pdf = await _conversionService.ConvertDocxToPdfAsync(docx, ct).ConfigureAwait(false);
+        }
+        catch (ConversionException ex)
+        {
+            _logger.LogWarning("[{SessionId}] CONVERT_TO_PDF falló con {Code}", _sessionId, ex.Code);
+            return await RejectAsync(ws, ConversionRejection(ex.Code), ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogError(ex, "[{SessionId}] Fallo de E/S en la carpeta temporal de conversión", _sessionId);
+            return await RejectAsync(ws, ConversionRejection(ErrorCatalog.ConversionFailed), ct);
+        }
+
+        if (pdf.LongLength > _options.MaxFileBytes)
+            return await RejectAsync(ws, new Rejection(ErrorCatalog.InvalidFileSize, $"Converted PDF must not exceed {_options.MaxFileBytes} bytes", PolicyViolation), ct);
+
+        await WebSocketTransport.SendJsonAsync(
+            ws,
+            new PdfContentMessage(pending.RequestId, pdf.LongLength, Convert.ToHexStringLower(SHA256.HashData(pdf))),
+            AcdJsonContext.Default.PdfContentMessage,
+            ct);
+        await ws.SendAsync(pdf, WebSocketMessageType.Binary, true, ct).ConfigureAwait(false);
+        return await CompleteAsync(ws, MessageType.PdfContent, ct);
+    }
+
+    private static Rejection ConversionRejection(string code) => code switch
+    {
+        ErrorCatalog.WordNotInstalled => new Rejection(code, "Microsoft Word is not installed on this device", PolicyViolation),
+        ErrorCatalog.ConversionTimeout => new Rejection(code, "Word did not finish converting the document in time", InternalFailure),
+        _ => new Rejection(ErrorCatalog.ConversionFailed, "Word could not convert the document to PDF", InternalFailure)
+    };
+
     private bool TryOpenWord(string path)
     {
         try
@@ -228,11 +282,8 @@ public sealed class DocumentWorkspaceHandler
     private bool TryResolveRemito(string? requestId, string? anio, string? numeroEmision, out string directory, out Rejection? rejection)
     {
         directory = string.Empty;
-        if (!Guid.TryParse(requestId, out _))
-        {
-            rejection = new Rejection(ErrorCatalog.InvalidRequestId, "requestId must be a valid UUID", PolicyViolation);
+        if (!TryValidateRequestId(requestId, out rejection))
             return false;
-        }
 
         if (!_paths.TryGetRemitoDirectory(anio!, numeroEmision!, out directory))
         {
@@ -242,6 +293,14 @@ public sealed class DocumentWorkspaceHandler
 
         rejection = null;
         return true;
+    }
+
+    private static bool TryValidateRequestId(string? requestId, out Rejection? rejection)
+    {
+        rejection = Guid.TryParse(requestId, out _)
+            ? null
+            : new Rejection(ErrorCatalog.InvalidRequestId, "requestId must be a valid UUID", PolicyViolation);
+        return rejection is null;
     }
 
     private static bool TryValidateWordName(string? fileName, out Rejection? rejection)
@@ -292,7 +351,8 @@ public sealed class DocumentWorkspaceHandler
     private enum PendingKind
     {
         Word,
-        PdfCopy
+        PdfCopy,
+        Conversion
     }
 
     private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open);

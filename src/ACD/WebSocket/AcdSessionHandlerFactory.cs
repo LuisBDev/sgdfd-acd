@@ -12,6 +12,7 @@ namespace ACD.WebSocket;
 
 public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
+    private readonly IConversionService _conversionService;
     private readonly DocumentEditStorage _documentEditStorage;
     private readonly IEditedPdfWatcherFactory _editedPdfWatcherFactory;
     private readonly IFirmaLauncher _firmaLauncher;
@@ -32,6 +33,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         IEditedPdfWatcherFactory editedPdfWatcherFactory,
         WorkspacePaths workspacePaths,
         WorkspaceFileStore workspaceFileStore,
+        IConversionService conversionService,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
     {
@@ -43,6 +45,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _editedPdfWatcherFactory = editedPdfWatcherFactory;
         _workspacePaths = workspacePaths;
         _workspaceFileStore = workspaceFileStore;
+        _conversionService = conversionService;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
     }
@@ -83,6 +86,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             _workspacePaths,
             _workspaceFileStore,
             _shellLauncher,
+            _conversionService,
             logger,
             sessionId);
 

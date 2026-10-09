@@ -181,3 +181,12 @@ public sealed record FolderOpenedMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.FolderOpened;
 }
+
+public sealed record PdfContentMessage(
+    [property: JsonPropertyName("requestId")]
+    string RequestId,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string Sha256)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.PdfContent;
+}

@@ -126,6 +126,18 @@ builder.Services.AddSingleton(sp => new WorkspacePaths(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit));
 builder.Services.AddSingleton(sp => new WorkspaceFileStore(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.MaxFileBytes));
+builder.Services.AddSingleton<WinWordProcesses>();
+builder.Services.AddSingleton<IConversionService>(sp =>
+{
+    var wordProcesses = sp.GetRequiredService<WinWordProcesses>();
+    return new WordComConversionService(
+        WordComConversionService.CreateWordApplication,
+        wordProcesses.CurrentIds,
+        wordProcesses,
+        TimeSpan.FromSeconds(sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentEdit.ConversionTimeoutSeconds),
+        Path.Combine(Path.GetTempPath(), "acd-conv"),
+        sp.GetRequiredService<ILogger<WordComConversionService>>());
+});
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());

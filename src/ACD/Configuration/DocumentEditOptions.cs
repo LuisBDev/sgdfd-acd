@@ -10,6 +10,7 @@ public sealed class DocumentEditOptions
     public int TimeoutMinutes { get; init; } = 60;
     public int PdfDebounceMilliseconds { get; init; } = 1500;
     public int PdfStabilizationTimeoutSeconds { get; init; } = 30;
+    public int ConversionTimeoutSeconds { get; init; } = 90;
 
     public string GetRootDirectory() =>
         string.IsNullOrWhiteSpace(RootDirectory)
