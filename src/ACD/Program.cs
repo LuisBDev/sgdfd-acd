@@ -1,5 +1,7 @@
 using System.Reflection;
 using ACD.Configuration;
+using ACD.DocumentWorkspace;
+using ACD.Files;
 using ACD.Firma;
 using ACD.Firma.Signing;
 using ACD.Hosting;
@@ -7,6 +9,7 @@ using ACD.PdfOpen;
 using ACD.Tray;
 using ACD.Update;
 using ACD.WebSocket;
+using ACD.Workstation;
 using Microsoft.Extensions.Options;
 using Serilog;
 using Velopack;
@@ -101,6 +104,8 @@ builder.Services.Configure<AppUpdateOptions>(builder.Configuration.GetSection("U
 
 builder.Services.AddSingleton<ISessionGate, SessionGate>();
 builder.Services.AddSingleton<IAcdSessionHandlerFactory, AcdSessionHandlerFactory>();
+builder.Services.AddSingleton<IStableFileProbe, StableFileProbe>();
+builder.Services.AddSingleton<IWorkspaceWatcherFactory, WorkspaceWatcherFactory>();
 builder.Services.AddScoped<IFileDepositService, FileDepositService>();
 builder.Services.AddScoped<IFirmaWatcherService, FirmaWatcherService>();
 
@@ -108,10 +113,27 @@ builder.Services.AddSingleton<IProcessRunner, ProcessRunner>();
 builder.Services.AddSingleton<IFirmaSignerResolver, RegistryFirmaSignerResolver>();
 builder.Services.AddSingleton<IFirmaCommandBuilder, FirmaOnpeCommandBuilder>();
 builder.Services.AddSingleton<IFirmaLauncher, FirmaLauncher>();
-builder.Services.AddSingleton<IPdfLauncher, ShellPdfLauncher>();
+builder.Services.AddSingleton<IShellLauncher, ShellLauncher>();
 builder.Services.AddSingleton(sp => new PdfOpenStorage(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.PdfOpen,
     sp.GetRequiredService<ILogger<PdfOpenStorage>>()));
+builder.Services.AddSingleton(sp => new WorkspacePaths(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace));
+builder.Services.AddSingleton(sp => new WorkspaceFileStore(
+    sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.MaxFileBytes));
+builder.Services.AddSingleton<WinWordProcesses>();
+builder.Services.AddSingleton<IConversionService>(sp =>
+{
+    var wordProcesses = sp.GetRequiredService<WinWordProcesses>();
+    return new WordComConversionService(
+        WordComConversionService.CreateWordApplication,
+        wordProcesses,
+        new WordConversionSettings(
+            sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.GetConversionTimeout(),
+            TimeSpan.FromSeconds(5),
+            Path.Combine(Path.GetTempPath(), "acd-conv")),
+        sp.GetRequiredService<ILogger<WordComConversionService>>());
+});
 
 builder.Services.AddSingleton<TrayIconService>();
 builder.Services.AddSingleton<ITrayStateNotifier>(sp => sp.GetRequiredService<TrayIconService>());
@@ -132,6 +154,7 @@ builder.Services.AddSingleton(sp => new Lazy<IUpdateTrigger>(() => sp.GetRequire
 var app = builder.Build();
 app.UseWebSockets();
 app.UseMiddleware<AcdWebSocketMiddleware>();
+app.MapMethods("/acd/info", ["GET", "OPTIONS"], WorkstationInfoEndpoint.Handle);
 
 var acdOptions = app.Services.GetRequiredService<IOptions<AcdOptions>>().Value;
 PortRegistry.Write(packId, acdOptions.Port);

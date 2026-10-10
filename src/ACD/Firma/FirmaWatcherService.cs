@@ -1,5 +1,6 @@
 using System.Threading.Channels;
 using ACD.Configuration;
+using ACD.Files;
 using ACD.Firma.Signing;
 using Microsoft.Extensions.Options;
 
@@ -7,7 +8,6 @@ namespace ACD.Firma;
 
 public sealed class FirmaWatcherService : IFirmaWatcherService
 {
-    private const int PollIntervalMs = 500;
     private const string ArchiveDirectoryName = "firmados";
 
     private readonly Channel<FirmaEvent> _channel = Channel.CreateUnbounded<FirmaEvent>(
@@ -15,6 +15,7 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
     private readonly ILogger<FirmaWatcherService> _logger;
     private readonly AcdOptions _options;
+    private readonly IStableFileProbe _stableFileProbe;
     private string? _expectedFilename;
     private CancellationTokenSource? _timeoutCts;
     private int _waitStarted;
@@ -23,9 +24,11 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
 
     public FirmaWatcherService(
         IOptions<AcdOptions> options,
+        IStableFileProbe stableFileProbe,
         ILogger<FirmaWatcherService> logger)
     {
         _options = options.Value;
+        _stableFileProbe = stableFileProbe;
         _logger = logger;
     }
 
@@ -192,51 +195,18 @@ public sealed class FirmaWatcherService : IFirmaWatcherService
         _ = WaitForSignedFileAsync(e.FullPath, _timeoutCts?.Token ?? CancellationToken.None);
     }
 
-    // Espera a que el archivo esté desbloqueado y con tamaño estable (>0) entre dos lecturas.
     private async Task WaitForSignedFileAsync(string path, CancellationToken token)
     {
-        var previousLength = -1L;
-
         try
         {
-            while (!token.IsCancellationRequested)
-            {
-                var readable = TryGetReadableLength(path, out var length);
-
-                if (readable && length == previousLength)
-                {
-                    _timeoutCts?.Cancel();
-                    _logger.LogInformation("Archivo de firma listo: {FilePath} ({Bytes} bytes)", path, length);
-                    await _channel.Writer.WriteAsync(new FirmaEvent(FirmaEventType.FileReady, path)).ConfigureAwait(false);
-                    return;
-                }
-
-                previousLength = readable ? length : -1;
-                await Task.Delay(PollIntervalMs, token).ConfigureAwait(false);
-            }
+            var length = await _stableFileProbe.WaitUntilStableAsync(path, ct: token).ConfigureAwait(false);
+            _timeoutCts?.Cancel();
+            _logger.LogInformation("Archivo de firma listo: {FilePath} ({Bytes} bytes)", path, length);
+            await _channel.Writer.WriteAsync(new FirmaEvent(FirmaEventType.FileReady, path)).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
             // Timeout global o cierre de sesión — OnTimeout emite el evento Timeout.
-        }
-    }
-
-    private static bool TryGetReadableLength(string path, out long length)
-    {
-        length = 0;
-        try
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
-            length = fs.Length;
-            return length > 0;
-        }
-        catch (IOException)
-        {
-            return false;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            return false;
         }
     }
 

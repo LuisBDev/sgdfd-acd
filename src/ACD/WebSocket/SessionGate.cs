@@ -2,20 +2,27 @@ namespace ACD.WebSocket;
 
 /// <summary>
 ///     Coordinador thread-safe que mantiene exclusividad por tipo de operación.
-///     Permite una firma y una apertura PDF en paralelo, pero nunca dos operaciones
+///     Permite una firma, una apertura PDF, un comando del workspace y una conversión a PDF
+///     en paralelo, pero nunca dos operaciones
 ///     simultáneas del mismo tipo.
 /// </summary>
 public sealed class SessionGate : ISessionGate
 {
-    private readonly SemaphoreSlim _connectionSlots = new(2, 2);
+    private readonly SemaphoreSlim _connectionSlots = new(5, 5);
+    private readonly SemaphoreSlim _conversionLock = new(1, 1);
     private readonly SemaphoreSlim _pdfOpenLock = new(1, 1);
     private readonly SemaphoreSlim _signingLock = new(1, 1);
+    private readonly SemaphoreSlim _workspaceLock = new(1, 1);
+    private volatile bool _isConversionActive;
     private volatile bool _isPdfOpenActive;
     private volatile bool _isSigningActive;
+    private volatile bool _isWorkspaceActive;
 
-    public bool IsActive => _isSigningActive || _isPdfOpenActive;
+    public bool IsActive => _isSigningActive || _isPdfOpenActive || _isWorkspaceActive || _isConversionActive;
     public bool IsSigningActive => _isSigningActive;
     public bool IsPdfOpenActive => _isPdfOpenActive;
+    public bool IsWorkspaceActive => _isWorkspaceActive;
+    public bool IsConversionActive => _isConversionActive;
 
     public Task<bool> TryAcquireConnectionAsync(CancellationToken ct) =>
         _connectionSlots.WaitAsync(0, ct);
@@ -47,6 +54,8 @@ public sealed class SessionGate : ISessionGate
     {
         SessionOperation.Signing => _signingLock,
         SessionOperation.PdfOpen => _pdfOpenLock,
+        SessionOperation.Workspace => _workspaceLock,
+        SessionOperation.Conversion => _conversionLock,
         _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, null)
     };
 
@@ -59,6 +68,12 @@ public sealed class SessionGate : ISessionGate
                 break;
             case SessionOperation.PdfOpen:
                 _isPdfOpenActive = active;
+                break;
+            case SessionOperation.Workspace:
+                _isWorkspaceActive = active;
+                break;
+            case SessionOperation.Conversion:
+                _isConversionActive = active;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(operation), operation, null);

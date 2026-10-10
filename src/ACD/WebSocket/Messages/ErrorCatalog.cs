@@ -28,6 +28,17 @@ public static class ErrorCatalog
     public const string UnexpectedMessage = "UNEXPECTED_MESSAGE";
     public const string UnknownMessageType = "UNKNOWN_MESSAGE_TYPE";
     public const string InternalError = "INTERNAL_ERROR";
+    public const string WorkspaceInvalidKey = "WORKSPACE_INVALID_KEY";
+    public const string WorkspaceInvalidFilename = "WORKSPACE_INVALID_FILENAME";
+    public const string WorkspaceFileExists = "WORKSPACE_FILE_EXISTS";
+    public const string WorkspaceFileNotFound = "WORKSPACE_FILE_NOT_FOUND";
+    public const string WorkspaceFolderNotFound = "WORKSPACE_FOLDER_NOT_FOUND";
+    public const string WorkspaceIntegrity = "WORKSPACE_INTEGRITY";
+    public const string WorkspaceIoFailed = "WORKSPACE_IO_FAILED";
+    public const string WordNotInstalled = "WORD_NOT_INSTALLED";
+    public const string ConversionTimeout = "CONVERSION_TIMEOUT";
+    public const string ConversionFailed = "CONVERSION_FAILED";
+    public const string WorkspaceWatchFailed = "WORKSPACE_WATCH_FAILED";
 
     private static readonly IReadOnlyDictionary<string, string> Categories = new Dictionary<string, string>
     {
@@ -50,6 +61,17 @@ public static class ErrorCatalog
         [UnexpectedMessage] = ErrorCategory.System,
         [UnknownMessageType] = ErrorCategory.System,
         [InternalError] = ErrorCategory.System,
+        [WorkspaceInvalidKey] = ErrorCategory.UserActionable,
+        [WorkspaceInvalidFilename] = ErrorCategory.UserActionable,
+        [WorkspaceFileExists] = ErrorCategory.UserActionable,
+        [WorkspaceFileNotFound] = ErrorCategory.UserActionable,
+        [WorkspaceFolderNotFound] = ErrorCategory.UserActionable,
+        [WorkspaceIntegrity] = ErrorCategory.Transient,
+        [WorkspaceIoFailed] = ErrorCategory.Transient,
+        [WordNotInstalled] = ErrorCategory.UserActionable,
+        [ConversionTimeout] = ErrorCategory.Transient,
+        [ConversionFailed] = ErrorCategory.System,
+        [WorkspaceWatchFailed] = ErrorCategory.System,
     };
 
     public static string CategoryOf(string code) =>

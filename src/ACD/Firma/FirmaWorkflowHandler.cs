@@ -214,23 +214,7 @@ public sealed class FirmaWorkflowHandler
         // Frame 2: contenido del archivo en fragmentos de 64 KB.
         try
         {
-            await using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read,
-                64 * 1024, true);
-
-            var buffer = new byte[64 * 1024];
-            var remaining = fileSize;
-            int bytesRead;
-
-            while ((bytesRead = await fs.ReadAsync(buffer, ct).ConfigureAwait(false)) > 0)
-            {
-                remaining -= bytesRead;
-                var endOfMessage = remaining <= 0;
-                await ws.SendAsync(
-                    buffer.AsMemory(0, bytesRead),
-                    WebSocketMessageType.Binary,
-                    endOfMessage,
-                    ct).ConfigureAwait(false);
-            }
+            await WebSocketTransport.SendFileAsync(ws, filePath, fileSize, ct).ConfigureAwait(false);
 
             _logger.LogInformation(
                 "[{SessionId}] SIGNED_FILE enviado: {Filename} ({Size} bytes)",

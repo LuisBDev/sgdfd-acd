@@ -74,7 +74,7 @@ public sealed class AcdWebSocketMiddleware
 
         if (!await _sessionGate.TryAcquireConnectionAsync(context.RequestAborted))
         {
-            _logger.LogWarning("Upgrade WebSocket rechazado — capacidad de dos conexiones alcanzada (4002)");
+            _logger.LogWarning("Upgrade WebSocket rechazado — capacidad de cinco conexiones alcanzada (4002)");
             var busyWs = await context.WebSockets.AcceptWebSocketAsync();
             await busyWs.CloseAsync(
                 (System.Net.WebSockets.WebSocketCloseStatus)4002,
