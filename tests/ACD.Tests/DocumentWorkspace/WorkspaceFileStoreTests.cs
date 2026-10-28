@@ -91,6 +91,115 @@ public sealed class WorkspaceFileStoreTests : IDisposable
             () => _store.ReadWordAsync(RemitoDirectory, "OFICIO.docx", CancellationToken.None));
     }
 
+    [Fact]
+    public async Task RestoreWord_replaces_same_file_with_saved_content_without_creating_another_word()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2, 3], CancellationToken.None);
+        var info = await _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [8, 9], Sha256Of([1, 2, 3]), CancellationToken.None);
+        Assert.Equal(new byte[] { 8, 9 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+        Assert.Equal(Sha256Of([8, 9]), info.Sha256);
+        Assert.Equal("OFICIO.docx", info.FileName);
+        Assert.Single(Directory.GetFiles(RemitoDirectory));
+        Assert.Equal(info, _store.DescribeLatestWord(RemitoDirectory));
+    }
+
+    [Fact]
+    public async Task RestoreWord_rejects_concurrent_edit_and_preserves_content()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
+        await Assert.ThrowsAsync<WorkspaceFileChangedException>(() =>
+            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([1, 2]), CancellationToken.None));
+        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+        Assert.Single(Directory.GetFiles(RemitoDirectory));
+    }
+
+    [Fact]
+    public async Task RestoreWord_rejects_locked_file_and_preserves_content()
+    {
+        var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
+        await using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+            await Assert.ThrowsAsync<WorkspaceFileLockedException>(() =>
+                _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), CancellationToken.None));
+        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(path));
+    }
+
+    [Theory]
+    [InlineData("~$OFICIO.docx")]
+    [InlineData("~$ICIO.docx")]
+    public async Task RestoreWord_rejects_word_owner_file(string ownerFile)
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
+        await File.WriteAllBytesAsync(Path.Combine(RemitoDirectory, ownerFile), [0]);
+        await Assert.ThrowsAsync<WorkspaceFileLockedException>(() =>
+            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), CancellationToken.None));
+        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+    }
+
+    [Fact]
+    public async Task RestoreWord_does_not_create_missing_file()
+    {
+        Directory.CreateDirectory(RemitoDirectory);
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), CancellationToken.None));
+        Assert.Empty(Directory.GetFiles(RemitoDirectory));
+    }
+
+    [Fact]
+    public async Task RestoreWord_cancelled_leaves_original_file_and_no_temporary_files()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), cts.Token));
+        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+        Assert.Single(Directory.GetFiles(RemitoDirectory));
+    }
+
+    [Fact]
+    public async Task RestoreWord_rejects_if_another_word_became_latest()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
+        CreateFile("NUEVO.docx", [7], DateTime.Now.AddMinutes(1));
+        await Assert.ThrowsAsync<WorkspaceFileChangedException>(() =>
+            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), CancellationToken.None));
+        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+        Assert.Equal(new byte[] { 7 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "NUEVO.docx")));
+    }
+
+    [Fact]
+    public async Task DiscardWord_removes_the_confirmed_file_without_creating_replacement_files()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        await _store.DiscardWordAsync(RemitoDirectory, "OFICIO.docx", Sha256Of([1, 2]), CancellationToken.None);
+        Assert.Empty(Directory.GetFiles(RemitoDirectory));
+    }
+
+    [Fact]
+    public async Task DiscardWord_preserves_locked_or_changed_files()
+    {
+        var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        await Assert.ThrowsAsync<WorkspaceFileChangedException>(() =>
+            _store.DiscardWordAsync(RemitoDirectory, "OFICIO.docx", Sha256Of([3]), CancellationToken.None));
+        using (new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read))
+            await Assert.ThrowsAsync<WorkspaceFileLockedException>(() =>
+                _store.DiscardWordAsync(RemitoDirectory, "OFICIO.docx", Sha256Of([1, 2]), CancellationToken.None));
+        Assert.Equal(new byte[] { 1, 2 }, await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
+    public async Task DiscardWord_cancelled_does_not_remove_the_file()
+    {
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        using var cts = new CancellationTokenSource();
+        await cts.CancelAsync();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            _store.DiscardWordAsync(RemitoDirectory, "OFICIO.docx", Sha256Of([1, 2]), cts.Token));
+        Assert.True(File.Exists(Path.Combine(RemitoDirectory, "OFICIO.docx")));
+    }
+
     private void CreateFile(string name, byte[] content, DateTime changedAt)
     {
         var path = Path.Combine(RemitoDirectory, name);

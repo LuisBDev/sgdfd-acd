@@ -21,6 +21,7 @@ public sealed class DocumentWorkspaceHandler
     private readonly string _sessionId;
     private readonly IShellLauncher _shellLauncher;
     private readonly WorkspaceFileStore _store;
+    private readonly IWordDocumentCloser _wordCloser;
     private PendingWrite? _pending;
 
     public DocumentWorkspaceHandler(
@@ -29,6 +30,7 @@ public sealed class DocumentWorkspaceHandler
         WorkspaceFileStore store,
         IShellLauncher shellLauncher,
         IConversionService conversionService,
+        IWordDocumentCloser wordCloser,
         ILogger logger,
         string sessionId)
     {
@@ -37,6 +39,7 @@ public sealed class DocumentWorkspaceHandler
         _store = store;
         _shellLauncher = shellLauncher;
         _conversionService = conversionService;
+        _wordCloser = wordCloser;
         _logger = logger;
         _sessionId = sessionId;
     }
@@ -55,6 +58,59 @@ public sealed class DocumentWorkspaceHandler
         _pending = new PendingWrite(PendingKind.Word, message.RequestId!, directory, message.Filename!, message.Size, message.Sha256!, message.Open);
         _logger.LogInformation("[{SessionId}] WRITE_WORD aceptado: request {RequestId}, {Size} bytes", _sessionId, message.RequestId, message.Size);
         return SessionState.ReceivingWorkspaceFile;
+    }
+
+    public async Task<SessionState> PrepareRestoreWordAsync(NativeWebSocket ws, RestoreWordMessage message, CancellationToken ct)
+    {
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
+            || !TryValidateWordName(message.Filename, out rejection)
+            || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
+            return await RejectAsync(ws, rejection!, ct);
+        if (message.ExpectedSha256 is not { Length: 64 } || !message.ExpectedSha256.All(Uri.IsHexDigit))
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "expectedSha256 must contain 64 hexadecimal characters", PolicyViolation), ct);
+        _pending = new PendingWrite(PendingKind.Restore, message.RequestId!, directory, message.Filename!, message.Size, message.Sha256!, false, message.ExpectedSha256, message.CloseWithoutSaving);
+        return SessionState.ReceivingWorkspaceFile;
+    }
+
+    public async Task<SessionState> DiscardWordAsync(NativeWebSocket ws, DiscardWordMessage message, CancellationToken ct)
+    {
+        if (!WorkspaceRequestValidation.TryResolveRemito(_paths, message.RequestId, message.Anio, message.NumeroEmision, out var directory, out var rejection)
+            || !TryValidateWordName(message.Filename, out rejection))
+            return await RejectAsync(ws, rejection!, ct);
+        if (!message.CloseWithoutSaving || message.ExpectedSha256 is not { Length: 64 } || !message.ExpectedSha256.All(Uri.IsHexDigit))
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "Discard requires a confirmed hash and closeWithoutSaving: true", PolicyViolation), ct);
+        var path = Path.Combine(directory, message.Filename!);
+        var closed = false;
+        var discarded = false;
+        try
+        {
+            _store.ValidateRestoreTarget(directory, message.Filename!, message.ExpectedSha256);
+            closed = await _wordCloser.CloseWithoutSavingAsync(path, ct).ConfigureAwait(false);
+            await _store.DiscardWordAsync(directory, message.Filename!, message.ExpectedSha256, ct).ConfigureAwait(false);
+            discarded = true;
+        }
+        catch (WorkspaceFileLockedException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.FileLocked, "ACD could not close this document in Word; check its dialogs and retry", PolicyViolation), ct);
+        }
+        catch (WorkspaceFileChangedException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileChanged, "The Word changed; confirm the discard again", PolicyViolation), ct);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileNotFound, "The local Word no longer exists", PolicyViolation), ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return await RejectIoAsync(ws, ex, "Could not discard the local Word", ct);
+        }
+        finally
+        {
+            if (closed && !discarded) TryOpenWord(path);
+        }
+        await WebSocketTransport.SendJsonAsync(ws, new WordDiscardedMessage(message.RequestId!, message.Filename!), AcdJsonContext.Default.WordDiscardedMessage, ct);
+        return await CompleteAsync(ws, MessageType.WordDiscarded, ct);
     }
 
     public async Task<SessionState> PrepareWritePdfCopyAsync(NativeWebSocket ws, WritePdfCopyMessage message, CancellationToken ct)
@@ -92,6 +148,7 @@ public sealed class DocumentWorkspaceHandler
 
         return pending.Kind switch
         {
+            PendingKind.Restore => await RestoreWordAsync(ws, pending, data, ct),
             PendingKind.Word => await WriteWordAsync(ws, pending, data, ct),
             PendingKind.PdfCopy => await WritePdfCopyAsync(ws, pending, data, ct),
             _ => await ConvertToPdfAsync(ws, pending, data, ct)
@@ -178,6 +235,47 @@ public sealed class DocumentWorkspaceHandler
             AcdJsonContext.Default.WordWrittenMessage,
             ct);
         return await CompleteAsync(ws, MessageType.WordWritten, ct);
+    }
+
+    private async Task<SessionState> RestoreWordAsync(NativeWebSocket ws, PendingWrite pending, byte[] data, CancellationToken ct)
+    {
+        WordFileInfo info;
+        var path = Path.Combine(pending.Directory, pending.FileName);
+        var closed = false;
+        var restored = false;
+        try
+        {
+            _store.ValidateRestoreTarget(pending.Directory, pending.FileName, pending.ExpectedSha256!);
+            closed = pending.CloseWithoutSaving && await _wordCloser.CloseWithoutSavingAsync(path, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            info = await _store.RestoreWordAsync(pending.Directory, pending.FileName, data, pending.ExpectedSha256!, ct).ConfigureAwait(false);
+            restored = true;
+        }
+        catch (WorkspaceFileLockedException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.FileLocked, "ACD could not close this document in Word; check for open dialogs and retry", PolicyViolation), ct);
+        }
+        catch (WorkspaceFileChangedException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileChanged, "The local Word changed; confirm the discard again", PolicyViolation), ct);
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+        {
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceFileNotFound, "The Word document no longer exists", PolicyViolation), ct);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return await RejectIoAsync(ws, ex, "Could not restore the Word document", ct);
+        }
+        finally
+        {
+            if (closed && !restored) TryOpenWord(path);
+        }
+        var opened = pending.CloseWithoutSaving && TryOpenWord(path);
+        await WebSocketTransport.SendJsonAsync(ws,
+            new WordWrittenMessage(pending.RequestId, info.FileName, WorkspaceFileNames.FormatLocal(info.ChangedAt), opened) { Type = MessageType.WordRestored },
+            AcdJsonContext.Default.WordWrittenMessage, ct);
+        return await CompleteAsync(ws, MessageType.WordRestored, ct);
     }
 
     private async Task<SessionState> WritePdfCopyAsync(NativeWebSocket ws, PendingWrite pending, byte[] data, CancellationToken ct)
@@ -296,9 +394,10 @@ public sealed class DocumentWorkspaceHandler
     private enum PendingKind
     {
         Word,
+        Restore,
         PdfCopy,
         Conversion
     }
 
-    private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open);
+    private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open, string? ExpectedSha256 = null, bool CloseWithoutSaving = false);
 }
