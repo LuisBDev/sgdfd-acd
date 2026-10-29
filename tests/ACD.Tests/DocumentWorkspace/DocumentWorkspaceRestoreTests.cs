@@ -143,19 +143,18 @@ public sealed class DocumentWorkspaceRestoreTests : IDisposable
     }
 
     [Fact]
-    public async Task Restore_without_explicit_close_flag_never_closes_word()
+    public async Task Restore_without_explicit_close_flag_is_rejected_without_closing_word()
     {
         var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
         await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
-        using var locked = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
         _closer.OnClose = _ => throw new InvalidOperationException("Close was not authorized by the command");
         using var ws = new RecordingWebSocket();
-        var handler = Handler();
-        await handler.PrepareRestoreWordAsync(ws, Message() with { CloseWithoutSaving = false }, CancellationToken.None);
-        await handler.HandleBinaryFrameAsync(ws, [8, 9], CancellationToken.None);
+        var result = await Handler().PrepareRestoreWordAsync(ws, Message() with { CloseWithoutSaving = false }, CancellationToken.None);
+        Assert.Equal(SessionState.Closed, result);
+        Assert.Equal(ErrorCatalog.WorkspaceIntegrity, (await ws.NextFrameAsync()).GetProperty("code").GetString());
         Assert.Empty(_closer.Closed);
         Assert.Empty(_shell.Opened);
-        Assert.Equal(ErrorCatalog.FileLocked, (await ws.NextFrameAsync()).GetProperty("code").GetString());
+        Assert.Equal(new byte[] { 1, 2 }, await File.ReadAllBytesAsync(path));
     }
 
     private static DiscardWordMessage DiscardMessage(string filename = "OFICIO.docx") =>
