@@ -222,6 +222,48 @@ public sealed class DocumentWorkspaceRestoreTests : IDisposable
         Assert.Equal([path], _shell.Opened);
     }
 
+    [Theory]
+    [InlineData("~$OFICIO.docx")]
+    [InlineData("~$ICIO.docx")]
+    public async Task Discard_ignores_orphan_word_owner_file(string ownerFile)
+    {
+        var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        await File.WriteAllBytesAsync(Path.Combine(RemitoDirectory, ownerFile), [0]);
+        using var ws = new RecordingWebSocket();
+        await Handler().DiscardWordAsync(ws, DiscardMessage(), CancellationToken.None);
+        Assert.Equal(MessageType.WordDiscarded, (await ws.NextFrameAsync()).GetProperty("type").GetString());
+        Assert.False(File.Exists(path));
+    }
+
+    [Theory]
+    [InlineData("~$OFICIO.docx")]
+    [InlineData("~$ICIO.docx")]
+    public async Task Restore_ignores_orphan_word_owner_file(string ownerFile)
+    {
+        var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        await File.WriteAllBytesAsync(Path.Combine(RemitoDirectory, ownerFile), [0]);
+        using var ws = new RecordingWebSocket();
+        var handler = Handler();
+        await handler.PrepareRestoreWordAsync(ws, Message(), CancellationToken.None);
+        await handler.HandleBinaryFrameAsync(ws, [8, 9], CancellationToken.None);
+        Assert.Equal(MessageType.WordRestored, (await ws.NextFrameAsync()).GetProperty("type").GetString());
+        Assert.Equal(new byte[] { 8, 9 }, await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
+    public async Task Discard_returns_file_locked_while_word_keeps_the_file_open()
+    {
+        var path = Path.Combine(RemitoDirectory, "OFICIO.docx");
+        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [1, 2], CancellationToken.None);
+        await using var openWord = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.Read);
+        using var ws = new RecordingWebSocket();
+        await Handler().DiscardWordAsync(ws, DiscardMessage(), CancellationToken.None);
+        Assert.Equal(ErrorCatalog.FileLocked, (await ws.NextFrameAsync()).GetProperty("code").GetString());
+        Assert.True(File.Exists(path));
+    }
+
     private sealed class FakeCloser : IWordDocumentCloser
     {
         public Action<string>? OnClose { get; set; }
