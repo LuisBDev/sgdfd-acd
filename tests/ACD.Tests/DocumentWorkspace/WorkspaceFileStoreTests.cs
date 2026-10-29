@@ -124,18 +124,6 @@ public sealed class WorkspaceFileStoreTests : IDisposable
         Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(path));
     }
 
-    [Theory]
-    [InlineData("~$OFICIO.docx")]
-    [InlineData("~$ICIO.docx")]
-    public async Task RestoreWord_rejects_word_owner_file(string ownerFile)
-    {
-        await _store.WriteWordAsync(RemitoDirectory, "OFICIO.docx", [4, 5], CancellationToken.None);
-        await File.WriteAllBytesAsync(Path.Combine(RemitoDirectory, ownerFile), [0]);
-        await Assert.ThrowsAsync<WorkspaceFileLockedException>(() =>
-            _store.RestoreWordAsync(RemitoDirectory, "OFICIO.docx", [9], Sha256Of([4, 5]), CancellationToken.None));
-        Assert.Equal(new byte[] { 4, 5 }, await File.ReadAllBytesAsync(Path.Combine(RemitoDirectory, "OFICIO.docx")));
-    }
-
     [Fact]
     public async Task RestoreWord_does_not_create_missing_file()
     {
