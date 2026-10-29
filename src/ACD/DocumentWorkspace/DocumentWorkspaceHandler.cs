@@ -66,9 +66,9 @@ public sealed class DocumentWorkspaceHandler
             || !TryValidateWordName(message.Filename, out rejection)
             || !TryValidateDeclaredContent(message.Size, message.Sha256, out rejection))
             return await RejectAsync(ws, rejection!, ct);
-        if (message.ExpectedSha256 is not { Length: 64 } || !message.ExpectedSha256.All(Uri.IsHexDigit))
-            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "expectedSha256 must contain 64 hexadecimal characters", PolicyViolation), ct);
-        _pending = new PendingWrite(PendingKind.Restore, message.RequestId!, directory, message.Filename!, message.Size, message.Sha256!, false, message.ExpectedSha256, message.CloseWithoutSaving);
+        if (!message.CloseWithoutSaving || message.ExpectedSha256 is not { Length: 64 } || !message.ExpectedSha256.All(Uri.IsHexDigit))
+            return await RejectAsync(ws, new WorkspaceRejection(ErrorCatalog.WorkspaceIntegrity, "Restore requires a confirmed hash and closeWithoutSaving: true", PolicyViolation), ct);
+        _pending = new PendingWrite(PendingKind.Restore, message.RequestId!, directory, message.Filename!, message.Size, message.Sha256!, false, message.ExpectedSha256);
         return SessionState.ReceivingWorkspaceFile;
     }
 
@@ -246,7 +246,7 @@ public sealed class DocumentWorkspaceHandler
         try
         {
             _store.ValidateRestoreTarget(pending.Directory, pending.FileName, pending.ExpectedSha256!);
-            closed = pending.CloseWithoutSaving && await _wordCloser.CloseWithoutSavingAsync(path, ct).ConfigureAwait(false);
+            closed = await _wordCloser.CloseWithoutSavingAsync(path, ct).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             info = await _store.RestoreWordAsync(pending.Directory, pending.FileName, data, pending.ExpectedSha256!, ct).ConfigureAwait(false);
             restored = true;
@@ -271,7 +271,7 @@ public sealed class DocumentWorkspaceHandler
         {
             if (closed && !restored) TryOpenWord(path);
         }
-        var opened = pending.CloseWithoutSaving && TryOpenWord(path);
+        var opened = TryOpenWord(path);
         await WebSocketTransport.SendJsonAsync(ws,
             new WordWrittenMessage(pending.RequestId, info.FileName, WorkspaceFileNames.FormatLocal(info.ChangedAt), opened) { Type = MessageType.WordRestored },
             AcdJsonContext.Default.WordWrittenMessage, ct);
@@ -399,5 +399,5 @@ public sealed class DocumentWorkspaceHandler
         Conversion
     }
 
-    private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open, string? ExpectedSha256 = null, bool CloseWithoutSaving = false);
+    private sealed record PendingWrite(PendingKind Kind, string RequestId, string Directory, string FileName, long Size, string Sha256, bool Open, string? ExpectedSha256 = null);
 }

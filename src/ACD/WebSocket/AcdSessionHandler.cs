@@ -13,7 +13,7 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandler
 {
     private const int ProtocolVersion = 2;
-    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace", "document.workspace.watch", "document.workspace.restore", "document.workspace.restore.close", "document.workspace.discard"];
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace", "document.workspace.watch", "document.workspace.restore.close", "document.workspace.discard"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
