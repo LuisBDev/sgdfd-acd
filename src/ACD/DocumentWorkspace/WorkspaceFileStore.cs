@@ -95,9 +95,6 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
     public async Task DiscardWordAsync(string directory, string fileName, string expectedSha256, CancellationToken ct)
     {
         var path = Path.Combine(directory, fileName);
-        if (File.Exists(Path.Combine(directory, "~$" + fileName))
-            || File.Exists(Path.Combine(directory, "~$" + fileName[2..])))
-            throw new WorkspaceFileLockedException(fileName);
         try
         {
             await using var current = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
@@ -121,12 +118,8 @@ public sealed class WorkspaceFileStore(long maxFileBytes)
             throw new WorkspaceFileTooLargeException(fileName, maxFileBytes);
         var path = Path.Combine(directory, fileName);
         var temporary = Path.Combine(directory, $".acd-restore-{Guid.NewGuid():N}.tmp");
-        if (File.Exists(Path.Combine(directory, "~$" + fileName))
-            || File.Exists(Path.Combine(directory, "~$" + fileName[2..])))
-            throw new WorkspaceFileLockedException(fileName);
         try
         {
-            // Block writers while checking and atomically replacing the confirmed file.
             await using var current = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
             var latest = DescribeLatestWord(directory);
             if (latest is null || !string.Equals(latest.FileName, fileName, StringComparison.OrdinalIgnoreCase))
