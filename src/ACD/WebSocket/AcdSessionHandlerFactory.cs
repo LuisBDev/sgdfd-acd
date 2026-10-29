@@ -12,6 +12,7 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
 {
     private readonly IConversionService _conversionService;
+    private readonly IWordDocumentCloser _wordCloser;
     private readonly IFirmaLauncher _firmaLauncher;
     private readonly ILoggerFactory _loggerFactory;
     private readonly AcdOptions _options;
@@ -30,6 +31,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         WorkspacePaths workspacePaths,
         WorkspaceFileStore workspaceFileStore,
         IConversionService conversionService,
+        IWordDocumentCloser wordCloser,
         IWorkspaceWatcherFactory workspaceWatcherFactory,
         ISessionGate sessionGate,
         ILoggerFactory loggerFactory)
@@ -41,6 +43,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
         _workspacePaths = workspacePaths;
         _workspaceFileStore = workspaceFileStore;
         _conversionService = conversionService;
+        _wordCloser = wordCloser;
         _workspaceWatcherFactory = workspaceWatcherFactory;
         _sessionGate = sessionGate;
         _loggerFactory = loggerFactory;
@@ -75,6 +78,7 @@ public sealed class AcdSessionHandlerFactory : IAcdSessionHandlerFactory
             _workspaceFileStore,
             _shellLauncher,
             _conversionService,
+            _wordCloser,
             logger,
             sessionId);
 

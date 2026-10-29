@@ -13,7 +13,7 @@ namespace ACD.WebSocket;
 public sealed class AcdSessionHandler
 {
     private const int ProtocolVersion = 2;
-    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace", "document.workspace.watch"];
+    private static readonly string[] Capabilities = ["pdf.sign.firma-onpe", "pdf.open", "document.workspace", "document.workspace.watch", "document.workspace.restore", "document.workspace.restore.close", "document.workspace.discard"];
     private static readonly string AgentVersion =
         Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.1.0";
 
@@ -188,6 +188,20 @@ public sealed class AcdSessionHandler
                 _state = await _pdfOpenHandler.PrepareAsync(webSocket, openPdfMsg, ct);
                 break;
 
+            case (SessionState.Authenticated, MessageType.DiscardWord):
+                var discardWordMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.DiscardWordMessage);
+                if (discardWordMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Workspace, ct)) return;
+                _state = await _documentWorkspaceHandler.DiscardWordAsync(webSocket, discardWordMsg, ct);
+                break;
+
+            case (SessionState.Authenticated, MessageType.RestoreWord):
+                var restoreWordMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.RestoreWordMessage);
+                if (restoreWordMsg is null) break;
+                if (!await TryBeginOperationAsync(webSocket, SessionOperation.Workspace, ct)) return;
+                _state = await _documentWorkspaceHandler.PrepareRestoreWordAsync(webSocket, restoreWordMsg, ct);
+                break;
+
             case (SessionState.Authenticated, MessageType.WriteWord):
                 var writeWordMsg = JsonSerializer.Deserialize(payload, AcdJsonContext.Default.WriteWordMessage);
                 if (writeWordMsg is null) break;
@@ -340,7 +354,7 @@ public sealed class AcdSessionHandler
         return type is MessageType.Auth or MessageType.PdfDownload or MessageType.OpenPdf or MessageType.RequestSignedFile
             or MessageType.Connected or MessageType.PdfReceived or MessageType.FirmaDisponible
             or MessageType.PdfOpened or MessageType.SignedFile or MessageType.FirmaTimeout
-            or MessageType.WriteWord or MessageType.ReadWord or MessageType.WritePdfCopy or MessageType.OpenFolder or MessageType.ConvertToPdf
+            or MessageType.DiscardWord or MessageType.WordDiscarded or MessageType.RestoreWord or MessageType.WordRestored or MessageType.WriteWord or MessageType.ReadWord or MessageType.WritePdfCopy or MessageType.OpenFolder or MessageType.ConvertToPdf
             or MessageType.WordWritten or MessageType.WordContent or MessageType.PdfCopyWritten or MessageType.FolderOpened or MessageType.PdfContent
             or MessageType.WatchWorkspace or MessageType.StopWatch or MessageType.WorkspaceWatching or MessageType.WorkspaceChanged
             or MessageType.Error;
