@@ -30,6 +30,7 @@ public static class ErrorCatalog
     public const string InternalError = "INTERNAL_ERROR";
     public const string WorkspaceInvalidKey = "WORKSPACE_INVALID_KEY";
     public const string WorkspaceInvalidFilename = "WORKSPACE_INVALID_FILENAME";
+    public const string WorkspaceFileChanged = "WORKSPACE_FILE_CHANGED";
     public const string WorkspaceFileExists = "WORKSPACE_FILE_EXISTS";
     public const string WorkspaceFileNotFound = "WORKSPACE_FILE_NOT_FOUND";
     public const string WorkspaceFolderNotFound = "WORKSPACE_FOLDER_NOT_FOUND";
@@ -63,6 +64,7 @@ public static class ErrorCatalog
         [InternalError] = ErrorCategory.System,
         [WorkspaceInvalidKey] = ErrorCategory.UserActionable,
         [WorkspaceInvalidFilename] = ErrorCategory.UserActionable,
+        [WorkspaceFileChanged] = ErrorCategory.UserActionable,
         [WorkspaceFileExists] = ErrorCategory.UserActionable,
         [WorkspaceFileNotFound] = ErrorCategory.UserActionable,
         [WorkspaceFolderNotFound] = ErrorCategory.UserActionable,

@@ -50,6 +50,26 @@ public sealed record WriteWordMessage(
     [property: JsonPropertyName("sha256")] string? Sha256,
     [property: JsonPropertyName("open")] bool Open);
 
+public sealed record RestoreWordMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("size")] long Size,
+    [property: JsonPropertyName("sha256")] string? Sha256,
+    [property: JsonPropertyName("expectedSha256")] string? ExpectedSha256,
+    [property: JsonPropertyName("closeWithoutSaving")] bool CloseWithoutSaving = false);
+
+public sealed record DiscardWordMessage(
+    [property: JsonPropertyName("type")] string Type,
+    [property: JsonPropertyName("requestId")] string? RequestId,
+    [property: JsonPropertyName("anio")] string? Anio,
+    [property: JsonPropertyName("numeroEmision")] string? NumeroEmision,
+    [property: JsonPropertyName("filename")] string? Filename,
+    [property: JsonPropertyName("expectedSha256")] string? ExpectedSha256,
+    [property: JsonPropertyName("closeWithoutSaving")] bool CloseWithoutSaving = false);
+
 public sealed record ReadWordMessage(
     [property: JsonPropertyName("type")] string Type,
     [property: JsonPropertyName("requestId")] string? RequestId,

@@ -152,3 +152,10 @@ public sealed record WorkspaceChangedMessage(
 {
     [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WorkspaceChanged;
 }
+
+public sealed record WordDiscardedMessage(
+    [property: JsonPropertyName("requestId")] string RequestId,
+    [property: JsonPropertyName("filename")] string Filename)
+{
+    [JsonPropertyName("type")] public string Type { get; init; } = MessageType.WordDiscarded;
+}

@@ -122,6 +122,7 @@ builder.Services.AddSingleton(sp => new WorkspacePaths(
 builder.Services.AddSingleton(sp => new WorkspaceFileStore(
     sp.GetRequiredService<IOptions<AcdOptions>>().Value.DocumentWorkspace.MaxFileBytes));
 builder.Services.AddSingleton<WinWordProcesses>();
+builder.Services.AddSingleton<IWordDocumentCloser>(_ => new WordDocumentCloser(RunningWordDocument.Find));
 builder.Services.AddSingleton<IConversionService>(sp =>
 {
     var wordProcesses = sp.GetRequiredService<WinWordProcesses>();

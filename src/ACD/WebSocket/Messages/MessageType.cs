@@ -7,6 +7,10 @@ public static class MessageType
     public const string PdfDownload = "PDF_DOWNLOAD";
     public const string OpenPdf = "OPEN_PDF";
     public const string RequestSignedFile = "REQUEST_SIGNED_FILE";
+    public const string DiscardWord = "DISCARD_WORD";
+    public const string WordDiscarded = "WORD_DISCARDED";
+    public const string RestoreWord = "RESTORE_WORD";
+    public const string WordRestored = "WORD_RESTORED";
     public const string WriteWord = "WRITE_WORD";
     public const string ReadWord = "READ_WORD";
     public const string WritePdfCopy = "WRITE_PDF_COPY";
